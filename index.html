@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>ผ่อนไหว</title>
+    <meta name="description" content="เปรียบเทียบและติดตามสินเชื่อบ้าน ให้ตัวเลขตรงกับใบแจ้งยอดธนาคารระดับสตางค์" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* design token ตาม spec ข้อ 5.2 */
+      :root {
+        --paper: #f5f5f1;
+        --ink: #161a18;
+        --ink-2: #5c625e;
+        --ink-3: #717874;
+        --rule: #dcdcd4;
+        --interest: #2b4570;
+        --principal-tx: #8a5a12;
+        --panel: #182742;
+        --panel-ink: #fbfaf7;
+        --panel-ink-2: #9db0cc;
+        --interest-dk: #5878ab;
+        --principal-dk: #e8a33d;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: 'IBM Plex Sans Thai', system-ui, sans-serif;
+        line-height: 1.7;
+        padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+      }
+      main { max-width: 640px; margin: 0 auto; }
+      h1 {
+        font-family: Anuphan, system-ui, sans-serif;
+        font-size: 28px; font-weight: 600; margin: 0 0 4px;
+      }
+      .sub { color: var(--ink-2); font-size: 14px; margin: 0 0 28px; }
+      .panel {
+        background: var(--panel); color: var(--panel-ink);
+        border-radius: 10px; padding: 20px; margin-bottom: 24px;
+      }
+      .panel h2 {
+        font-family: Anuphan, sans-serif; font-size: 12px; font-weight: 500;
+        letter-spacing: .06em; text-transform: uppercase;
+        color: var(--panel-ink-2); margin: 0 0 14px;
+      }
+      /* แถบสองสี = หน่วยพื้นฐานของ UI ตาม spec ข้อ 5.1 */
+      .ribbon { display: flex; height: 34px; border-radius: 4px; overflow: hidden; }
+      .ribbon span { display: block; }
+      .ribbon .i { background: var(--interest-dk); }
+      .ribbon .p { background: var(--principal-dk); border-left: 1px solid var(--panel); }
+      .legend {
+        display: flex; justify-content: space-between;
+        font-size: 13px; margin-top: 10px; color: var(--panel-ink-2);
+      }
+      .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
+      .i-tx { color: var(--interest-dk); }
+      .p-tx { color: var(--principal-dk); }
+      dl { display: grid; grid-template-columns: 1fr auto; gap: 0; margin: 0; font-size: 15px; }
+      dt, dd { padding: 9px 0; border-bottom: 1px solid var(--rule); margin: 0; }
+      dd { text-align: right; font-variant-numeric: tabular-nums; }
+      dt { color: var(--ink-2); }
+      footer { margin-top: 28px; font-size: 13px; color: var(--ink-3); }
+      code {
+        font-family: ui-monospace, monospace; font-size: 12px;
+        background: #e9e9e3; padding: 1px 5px; border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>ผ่อนไหว</h1>
+      <p class="sub">เปรียบเทียบและติดตามสินเชื่อบ้าน — เลขต้องตรงใบแจ้งยอดระดับสตางค์</p>
+      <div id="app">กำลังโหลด…</div>
+      <footer>
+        <p>
+          M1 — engine อย่างเดียว ยังไม่มี UI จริง<br />
+          หน้านี้มีไว้พิสูจน์ว่า engine ทำงานในเบราว์เซอร์ได้และ pipeline deploy ต่อกันครบ
+        </p>
+      </footer>
+    </main>
+    <script type="module" src="/src/smoke.ts"></script>
+  </body>
+</html>
