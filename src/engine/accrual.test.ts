@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ymd, daysBetween, isLeapYear, dayOfWeek, isWeekend, addMonthsClamped } from './date.js'
+import { ymd, daysBetween, isLeapYear, dayOfWeek, isWeekend, addMonthsClamped, type ISODate } from './date.js'
 import { accrueInterest, accrualDays, accrueInterestVariableRate } from './accrual.js'
 import { baht, bps, toFixed, formatFixedBaht, roundFixed, type Fixed } from './money.js'
 
@@ -143,11 +143,9 @@ describe('TV-7 อัตราเปลี่ยนกลางงวด', () =>
     const d0 = ymd(2027, 1, 1)
     const d1 = ymd(2027, 1, 31)
     const changeOn = ymd(2027, 1, 15)
-    const rateAt = (d: string) => (d < changeOn ? bps(250) : bps(525))
+    const rateAt = (x: ISODate) => (x < changeOn ? bps(250) : bps(525))
 
-    const { interest, segments } = accrueInterestVariableRate(
-      P3M, d0, d1, 'ACT/365F', rateAt as (d: never) => never,
-    )
+    const { interest, segments } = accrueInterestVariableRate(P3M, d0, d1, 'ACT/365F', rateAt)
 
     expect(segments).toHaveLength(2)
     expect(segments[0]).toMatchObject({ from: d0, to: changeOn, rateBps: 250 })
@@ -167,9 +165,7 @@ describe('TV-7 อัตราเปลี่ยนกลางงวด', () =>
   it('อัตราไม่เปลี่ยน ต้องได้ segment เดียวและตรงกับ accrueInterest', () => {
     const d0 = ymd(2027, 3, 1)
     const d1 = ymd(2027, 4, 1)
-    const { interest, segments } = accrueInterestVariableRate(
-      P3M, d0, d1, 'ACT/365F', (() => bps(500)) as (d: never) => never,
-    )
+    const { interest, segments } = accrueInterestVariableRate(P3M, d0, d1, 'ACT/365F', () => bps(500))
     expect(segments).toHaveLength(1)
     expect(interest).toBe(accrueInterest(P3M, bps(500), d0, d1, 'ACT/365F'))
   })
