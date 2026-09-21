@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "baanledger",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-01",
+
+  // serve SPA จาก dist/ — not_found_handling ทำให้ client-side routing ทำงาน
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+
+  // ping Supabase ทุก 3 วัน ตี 3 UTC (10:00 น. เวลาไทย) กัน project pause
+  // free tier pause หลังไม่มี request 7 วัน  ทุก 3 วันจึงมี margin พอ
+  "triggers": {
+    "crons": ["0 3 */3 * *"]
+  },
+
+  "observability": {
+    "enabled": true
+  }
+
+  // ตั้งค่าที่ต้องมีก่อน deploy (ทำผ่าน dashboard หรือ wrangler secret put):
+  //   SUPABASE_URL       - vars ธรรมดา ไม่ลับ
+  //   SUPABASE_ANON_KEY  - secret
+}
