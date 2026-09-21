@@ -5,6 +5,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "types": ["node", "vitest/globals", "@cloudflare/workers-types"],
+    "jsx": "react-jsx",
 
     "strict": true,
     "noUncheckedIndexedAccess": true,
@@ -22,8 +23,9 @@
 
     "baseUrl": ".",
     "paths": {
-      "@engine/*": ["src/engine/*"]
+      "@engine/*": ["src/engine/*"],
+      "@/*": ["src/*"]
     }
   },
-  "include": ["src", "worker", "vitest.config.ts"]
+  "include": ["src", "worker", "vite.config.ts"]
 }

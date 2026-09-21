@@ -1,0 +1,123 @@
+@import 'tailwindcss';
+
+/**
+ * Design tokens — spec ข้อ 5.2
+ *
+ * แนวคิด: "กรรมสิทธิ์กำลังย้ายมือ"
+ * ทุกจำนวนเงินมี 2 ส่วนเสมอ — ส่วนที่หายไปให้ธนาคาร กับส่วนที่กลายเป็นของเรา
+ * หน่วยพื้นฐานของ UI ไม่ใช่ card แต่เป็นแถบสองสี
+ *
+ * ห้ามใช้: พื้นครีม + serif + terracotta, พื้นดำ + acid green, gradient wash เป็นของตกแต่ง
+ */
+@theme {
+  /* พื้นผิว — เย็นกว่า cream ไม่ใช่ warm beige */
+  --color-paper: #f5f5f1;
+  --color-paper-raised: #ffffff;
+  --color-rule: #dcdcd4;
+
+  /* หมึก */
+  --color-ink: #161a18;
+  --color-ink-2: #5c625e;
+  --color-ink-3: #717874;   /* แก้จาก #8d938f ที่ contrast 2.87 = ตก AA */
+
+  /* คู่สีความหมาย — ใช้แค่ 2 สีนี้ทั้งแอพ
+     น้ำเงินหมึก = เอกสารสัญญา เย็น เป็นของธนาคาร
+     เหลืองส้ม  = อบอุ่น เป็นของเรา
+     อ่านความหมายได้โดยไม่ต้องมี legend และไม่ใช้แดง=แย่ เขียว=ดี
+     เพราะดอกเบี้ยไม่ใช่ "ผิด" มันคือต้นทุนของการมีบ้านตอนนี้ */
+  --color-interest: #2b4570;
+  --color-interest-tint: #2b457022;
+  --color-principal: #d98b2b;
+  --color-principal-tint: #d98b2b22;
+  /* เงินต้นบนพื้นกระดาษเมื่อใช้เป็นตัวอักษร ต้องเข้มกว่าตอนใช้เป็นแถบสี (2.50 -> 5.41) */
+  --color-principal-text: #8a5a12;
+
+  /* สถานะ — เฉพาะเตือนจริง ๆ */
+  --color-warn: #a8431f;
+  --color-ok: #2f6b4f;
+
+  /* แผงหมึกเข้ม — ใช้เฉพาะส่วนบนของ Dashboard และแถบสรุปผลแผนโปะ */
+  --color-panel: #182742;
+  --color-panel-rule: #2f4165;
+  --color-panel-ink: #fbfaf7;
+  --color-panel-ink-2: #9db0cc;
+  --color-panel-ink-3: #6f82a0;
+
+  /* คู่สีบนพื้นหมึกเข้ม ต้องสว่างกว่าคู่สีบนพื้นกระดาษ ไม่ใช่ค่าเดียวกัน
+     interest-dark แก้จาก #3d5375 ที่ contrast กับพื้นแผงแค่ 1.91
+     ปีแรก ๆ ริบบิ้นเป็นสีดอกเบี้ยเกือบทั้งแถบ แผงจะดูเหมือนว่างเปล่า */
+  --color-interest-dark: #5878ab;
+  --color-principal-dark: #e8a33d;
+  /* hairline คั่นสองสีในริบบิ้น ชดเชยคอนทราสต์ระหว่างทองกับสเลตที่ลดลง */
+  --color-ribbon-rule: #182742;
+
+  --font-display: 'Anuphan', system-ui, sans-serif;
+  --font-body: 'IBM Plex Sans Thai', system-ui, sans-serif;
+
+  /* ลำดับขนาดต้องห่างกันจริง ถ้าทุกอย่างอยู่ในช่วง 13-16 หน้าจอจะอ่านยากทันที */
+  --text-hero: 2.375rem;      /* 38 */
+  --text-hero--line-height: 1.1;
+  --text-figure: 1.5rem;      /* 24 */
+  --text-lead: 1.375rem;      /* 22 */
+  --text-row: 1.0625rem;      /* 17 */
+  --text-meta: 0.8125rem;     /* 13 */
+  --text-micro: 0.6875rem;    /* 11 */
+}
+
+@layer base {
+  html {
+    /* Safari บน iOS ซูมเองถ้า font-size ของช่องกรอกต่ำกว่า 16px */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    /* ภาษาไทยต้องสูงกว่าอังกฤษ สระบน/ล่างซ้อนกันชนกันง่าย */
+    line-height: 1.7;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    line-height: 1.35;
+  }
+
+  table {
+    line-height: 1.5;
+  }
+
+  /* ช่องกรอกทุกช่องขั้นต่ำ 16px — ต่ำกว่านี้ Safari iOS จะซูมหน้าจอเองทุกครั้งที่แตะ
+     บั๊กนี้ทดสอบบน desktop ไม่เจอ */
+  input, select, textarea {
+    font-size: max(1rem, 16px);
+    font-family: inherit;
+  }
+
+  /* จังหวะเดียวที่มี animation คือตอนบันทึกการจ่ายสำเร็จ
+     ไม่มี fade-in-on-scroll ไม่มี hover transition บนทุก card */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* ตัวเลขทุกจุดต้องเป็น tabular figures
+     ห้ามสลับไปใช้ monospace face เพื่อให้เลขตรงคอลัมน์ — tnum พอ */
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  /* พื้นที่แตะขั้นต่ำ 44x44 ตามข้อ 5A.5 */
+  .tap {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}

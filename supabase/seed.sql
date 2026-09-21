@@ -7,7 +7,7 @@
 
 -- MRR จากตารางประกาศธนาคารพาณิชย์ ณ 7 สิงหาคม 2569 [SOURCE: อินโฟเควสท์]
 -- ต้องมี as_of เสมอ ถ้าเกิน 90 วัน UI ต้องขึ้น badge เตือนว่าควรตรวจสอบใหม่
-insert into banks (bank_code, name_th, name_en, is_sfi, mrr_bps, mrr_as_of) values
+insert into ponwai.banks (bank_code, name_th, name_en, is_sfi, mrr_bps, mrr_as_of) values
   ('BBL',   'กรุงเทพ',            'Bangkok Bank',            false, 6500, '2026-08-07'),
   ('SCB',   'ไทยพาณิชย์',          'Siam Commercial Bank',    false, 6575, '2026-08-07'),
   ('KBANK', 'กสิกรไทย',           'Kasikornbank',            false, 6580, '2026-08-07'),
@@ -21,14 +21,14 @@ on conflict (bank_code) do update set
 
 -- สถาบันการเงินเฉพาะกิจ — ไม่อยู่ในตารางธนาคารพาณิชย์ จึงยังไม่มีค่า MRR ในมือ
 -- แต่เป็นตัวเลือกหลักของคนซื้อบ้านไทยเพราะให้วงเงินสูงกว่า จะขาดไม่ได้
-insert into banks (bank_code, name_th, name_en, is_sfi) values
+insert into ponwai.banks (bank_code, name_th, name_en, is_sfi) values
   ('GHB',   'ธอส.',               'Government Housing Bank',      true),
   ('GSB',   'ออมสิน',             'Government Savings Bank',      true),
   ('BAAC',  'ธ.ก.ส.',             'BAAC',                         true)
 on conflict (bank_code) do nothing;
 
 -- ธนาคารพาณิชย์อื่นที่ยังไม่มีค่า MRR
-insert into banks (bank_code, name_th, name_en, is_sfi) values
+insert into ponwai.banks (bank_code, name_th, name_en, is_sfi) values
   ('CIMBT', 'ซีไอเอ็มบี ไทย',      'CIMB Thai Bank',      false),
   ('LHB',   'แลนด์ แอนด์ เฮ้าส์',   'LH Bank',             false)
 on conflict (bank_code) do nothing;
@@ -45,7 +45,7 @@ on conflict (bank_code) do nothing;
 -- ยังไม่รวมวันพระและวันหยุดชดเชย ผู้ใช้เพิ่มเองได้จาก UI
 -- ------------------------------------------------------------
 
-insert into bank_holidays (user_id, holiday_date, name_th, source) values
+insert into ponwai.bank_holidays (user_id, holiday_date, name_th, source) values
   (null, '2026-01-01', 'วันขึ้นปีใหม่',              'bot_announcement'),
   (null, '2026-04-06', 'วันจักรี',                   'bot_announcement'),
   (null, '2026-04-13', 'วันสงกรานต์',                'bot_announcement'),
