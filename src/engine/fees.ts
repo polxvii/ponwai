@@ -232,7 +232,9 @@ export function buildCostCashflows(model: CostModel, startDate: ISODate): CashOu
 
 /** ต้นทุนรวมที่ไม่ใช่ดอกเบี้ย ตลอดอายุสัญญา — ไม่คิดมูลค่าเงินตามเวลา ใช้คู่กับ XIRR เสมอ */
 export function totalNonInterestCost(flows: readonly CashOutflow[]): Satang {
-  return flows.reduce((a, x) => a + x.amountSatang, ZERO_SATANG) as Satang
+  let total: bigint = ZERO_SATANG
+  for (const x of flows) total += x.amountSatang
+  return total as Satang
 }
 
 /** จัดกลุ่มกระแสเงินสดตามปีปฏิทิน ใช้กับกราฟรายปี */
