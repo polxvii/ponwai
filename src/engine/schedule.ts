@@ -20,6 +20,7 @@ import {
   findRateStep, resolveRate, resolveConvention, changePointsWithin,
 } from './rates.js'
 import { actualDueDate, nominalDueDate, type DateRuleConfig } from './schedule-dates.js'
+import { resolvePrepayOn, type PrepayPlan } from './prepay.js'
 import type {
   LoanTerms, PaymentEvent, ScheduleRow, ScheduleResult, RowFlag,
 } from './types.js'
@@ -30,6 +31,7 @@ const MAX_PERIODS = 1200
 export function buildSchedule(
   terms: LoanTerms,
   events: readonly PaymentEvent[] = [],
+  prepayPlan?: PrepayPlan,
 ): ScheduleResult {
   const cfg: DateRuleConfig = {
     startDate: terms.startDate,
@@ -86,6 +88,20 @@ export function buildSchedule(
     }
 
     periodInterest = add(periodInterest, accrueSpan(terms, balance, segFrom, due, step))
+
+    // ---- ยอดโปะจากแผน (ข้อ 3.4) ตกที่วันตัดยอดเสมอ ----
+    // ดอกเบี้ยของงวดคิดเสร็จแล้วจากเงินต้นก่อนโปะ การโปะจึงตัดต้นได้เต็ม
+    if (prepayPlan) {
+      const planned = toFixed(resolvePrepayOn(prepayPlan, due))
+      if (planned > 0n) {
+        const applied = planned > balance ? balance : planned
+        if (applied > 0n) {
+          balance = sub(balance, applied)
+          prepayThisPeriod = add(prepayThisPeriod, applied)
+          if (!flags.includes('prepay')) flags.push('prepay')
+        }
+      }
+    }
 
     // ---- ปัดเศษครั้งเดียว ณ จุดตัดชำระ (spec ข้อ 3.3) ----
     const conv = resolveConvention(terms.conventions, due)
