@@ -117,6 +117,15 @@ export type ScheduleResult = {
   totalInterestFixed: Fixed
   totalPrincipalFixed: Fixed
   totalPaymentFixed: Fixed
+  /**
+   * ดอกเบี้ยที่ถูกทบเข้าเงินต้น — มากกว่า 0 เมื่อ capitaliseUnpaidInterest = true
+   * และเคยมีงวดที่จ่ายไม่พอดอก UI ต้องแสดงเป็นคำเตือน ไม่ใช่ซ่อนไว้
+   *
+   * เป็นตัวที่ทำให้ Σ เงินต้น มากกว่าวงเงินตั้งต้น:
+   *   Σ เงินต้น  = วงเงินตั้งต้น + totalCapitalisedFixed
+   *   Σ ยอดจ่าย  = Σ ดอกเบี้ย + วงเงินตั้งต้น   (จริงเสมอทุกโหมด)
+   */
+  totalCapitalisedFixed: Fixed
   /** true = ปิดหนี้ครบ  false = ชนเพดานจำนวนงวดแล้วยังมีหนี้เหลือ */
   paidOff: boolean
 }

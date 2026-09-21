@@ -54,6 +54,7 @@ export function buildSchedule(
   let prevRateBps: number | null = null
   let prevBasis: string | null = null
   let paidOff = false
+  let totalCapitalised = ZERO_FIXED
 
   for (let period = 1; period <= MAX_PERIODS; period++) {
     const nominal = nominalDueDate(cfg, period)
@@ -134,6 +135,7 @@ export function buildSchedule(
       flags.push('negative_amortization')
       if (conv.capitaliseUnpaidInterest) {
         balance = add(balance, shortfall)
+        totalCapitalised = add(totalCapitalised, shortfall)
         accruedCarried = ZERO_FIXED
       } else {
         accruedCarried = shortfall
@@ -169,6 +171,7 @@ export function buildSchedule(
     totalInterestFixed: rows.reduce((a, r) => add(a, r.interestFixed), ZERO_FIXED),
     totalPrincipalFixed: rows.reduce((a, r) => add(a, r.principalFixed), ZERO_FIXED),
     totalPaymentFixed: rows.reduce((a, r) => add(a, r.paymentFixed), ZERO_FIXED),
+    totalCapitalisedFixed: totalCapitalised,
     paidOff,
   }
 }
