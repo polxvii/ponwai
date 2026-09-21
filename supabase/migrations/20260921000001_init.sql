@@ -378,3 +378,25 @@ create table ponwai.user_prefs (
   last_property_id      uuid references ponwai.properties(id) on delete set null,
   updated_at            timestamptz not null default now()
 );
+
+-- ============================================================
+-- สิทธิ์ระดับตาราง
+-- ============================================================
+--
+-- ⚠️ จำเป็น ไม่ใช่ทางเลือก
+-- schema public ของ Supabase มี grant ตั้งไว้ให้แล้วโดย default
+-- แต่ schema ที่สร้างเองไม่มี ถ้าข้ามขั้นนี้จะเจอ "permission denied for table"
+-- ทั้งที่ RLS policy ถูกต้องทุกอย่าง เพราะ GRANT กับ RLS เป็นคนละชั้นกัน
+--
+-- ให้สิทธิ์กว้างไว้ที่ชั้น GRANT แล้วให้ RLS เป็นตัวกั้นจริง
+-- ตารางที่ไม่มี policy เขียน (banks, payment_allocations) และ
+-- การลบ payments ยังถูกบล็อกอยู่ดี เพราะไม่มี policy รองรับ
+
+grant select, insert, update, delete on all tables in schema ponwai to authenticated;
+grant usage, select on all sequences in schema ponwai to authenticated;
+
+-- ตารางที่สร้างทีหลังก็ได้สิทธิ์เดียวกันอัตโนมัติ
+alter default privileges in schema ponwai
+  grant select, insert, update, delete on tables to authenticated;
+alter default privileges in schema ponwai
+  grant usage, select on sequences to authenticated;
