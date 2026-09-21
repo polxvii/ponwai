@@ -162,8 +162,15 @@ create table ponwai.bank_holidays (
   holiday_date date not null,
   name_th      text,
   source       text not null default 'user_added' check (source in ('bot_announcement','user_added')),
-  unique nulls not distinct (user_id, holiday_date)
+  note         text
 );
+-- ใช้ partial unique index แทน "unique nulls not distinct" ซึ่งต้องการ PG15+
+-- ได้ผลเดียวกันคือ ผู้ใช้หนึ่งคนมีวันหยุดวันเดียวกันซ้ำไม่ได้
+-- และวันหยุดที่ seed ไว้ (user_id null) ก็ซ้ำไม่ได้เช่นกัน
+create unique index bank_holidays_user_date_uniq
+  on ponwai.bank_holidays (user_id, holiday_date) where user_id is not null;
+create unique index bank_holidays_seed_date_uniq
+  on ponwai.bank_holidays (holiday_date) where user_id is null;
 create index bank_holidays_date_idx on ponwai.bank_holidays(holiday_date);
 
 -- ============================================================
