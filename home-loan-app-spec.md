@@ -1,4 +1,4 @@
-# BaanLedger — Spec สำหรับส่งต่อ Claude Code
+# ผ่อนไหว (ponwai) — Spec สำหรับส่งต่อ Claude Code
 
 > เอกสารนี้เป็น **build spec** ไม่ใช่ marketing doc
 > ทุกตัวเลขในเอกสารระบุ provenance: `[MEASURED]` = คำนวณเองในเอกสารนี้ / `[SOURCE]` = มีแหล่งอ้างอิง / `[ASSUME]` = สมมติ ต้องยืนยันก่อนใช้
