@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { rankOffers, sensitivityBand, findRankFlips } from '@engine/compare.js'
 import { baht as toSatang } from '@engine/money.js'
 import { Field, NumberField, SelectField, TextField, Toggle } from '@/components/Field'
+import { formatDuration } from '@/lib/format'
 import { useLocalState } from '@/lib/persist'
 import { ResultsTable } from './ResultsTable'
 import { CostCurveChart, SensitivityBand } from './CostCurveChart'
@@ -78,6 +79,13 @@ export function ComparePage() {
     }
   }, [drafts, common, locked])
 
+  /** จำนวนงวดที่จะผ่อนจริงของแต่ละข้อเสนอ — ไม่เท่ากับเทอมตามสัญญาถ้าจ่ายเกินค่างวด */
+  const actualMonths = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const r of ranked) if (r.feasible) m.set(r.bankCode, r.totalPeriods)
+    return m
+  }, [ranked])
+
   const missing = drafts.flatMap((d) =>
     assessCompleteness(d, common, locked !== null).missing.map((m) => ({
       ...m,
@@ -152,6 +160,7 @@ export function ComparePage() {
               index={i}
               draft={d}
               termYears={common.termYears}
+              actualMonths={actualMonths.get(d.id) ?? null}
               lockedPayment={locked}
               onChange={(p) => update(d.id, p)}
               {...(drafts.length > MIN_OFFERS ? { onRemove: () => removeOffer(d.id) } : {})}
@@ -218,6 +227,7 @@ function OfferForm({
   index,
   draft,
   termYears,
+  actualMonths,
   lockedPayment,
   onChange,
   onRemove,
@@ -225,6 +235,8 @@ function OfferForm({
   index: number
   draft: OfferDraft
   termYears: number
+  /** จำนวนงวดที่จะผ่อนจริงตามตาราง null = ยังคำนวณไม่ได้ */
+  actualMonths: number | null
   /** ไม่ null = ล็อกค่างวดอยู่ ค่างวดในช่องนี้จะไม่ถูกใช้คำนวณ */
   lockedPayment: number | null
   onChange: (patch: Partial<OfferDraft>) => void
@@ -236,7 +248,6 @@ function OfferForm({
     onChange({ promoRates: next })
   }
 
-  const floatingYears = Math.max(0, termYears - promoYears(draft))
 
   return (
     <section className="rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4">
@@ -288,11 +299,7 @@ function OfferForm({
         <Field
           label="หลังพ้นโปร"
           suffix="%"
-          hint={
-            floatingYears > 0
-              ? `กินเวลา ${floatingYears} ปีจาก ${termYears}`
-              : 'สัญญาจบก่อนพ้นโปร อัตรานี้ไม่ถูกใช้'
-          }
+          hint={floatingHint(termYears, promoYears(draft), actualMonths)}
         >
           <NumberField value={draft.floatingRate} onChange={(v) => onChange({ floatingRate: v })} />
         </Field>
@@ -374,4 +381,23 @@ function quoteHint(quoted: number | '', locked: number | null): string | undefin
   return diff > 0
     ? `คุณจะจ่าย ${locked.toLocaleString('en-US')} มากกว่าใบเสนอ ${amount} — ส่วนเกินลดเงินต้นทั้งก้อน`
     : `คุณจะจ่าย ${locked.toLocaleString('en-US')} ต่ำกว่าใบเสนอ ${amount} — ธนาคารอาจไม่ยอม`
+}
+
+/**
+ * เรตลอยตัวกินเวลาเท่าไหร่
+ *
+ * ⛔ ห้ามอ้างเทอมตามสัญญาเพียว ๆ — จ่ายเกินค่างวดแล้วหนี้ปิดเร็วกว่ามาก
+ *    เช่น สัญญา 30 ปีแต่จ่าย 40,000 ปิดใน 8 ปี เรตลอยตัวกินแค่ 5 ปี ไม่ใช่ 27
+ *    ตัวเลขที่เกินจริงทำให้ผู้ใช้กลัวเรตลอยตัวมากกว่าที่ควร
+ */
+function floatingHint(termYears: number, promo: number, actualMonths: number | null): string {
+  if (actualMonths === null) {
+    const left = Math.max(0, termYears - promo)
+    return left > 0 ? `ตามสัญญากินเวลา ${left} ปีจาก ${termYears}` : 'สัญญาจบก่อนพ้นโปร'
+  }
+  const floatMonths = actualMonths - promo * 12
+  if (floatMonths <= 0) {
+    return `ปิดหนี้ใน ${formatDuration(actualMonths)} ยังไม่พ้นโปร อัตรานี้ไม่ถูกใช้`
+  }
+  return `กินเวลา ${formatDuration(floatMonths)} จากที่ผ่อนจริง ${formatDuration(actualMonths)}`
 }
