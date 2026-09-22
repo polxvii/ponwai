@@ -51,6 +51,11 @@
   /* hairline คั่นสองสีในริบบิ้น ชดเชยคอนทราสต์ระหว่างทองกับสเลตที่ลดลง */
   --color-ribbon-rule: #182742;
 
+  /* สีแบรนด์จากไฟล์โลโก้ ใช้เฉพาะกับชื่อแอพ
+     ⛔ ห้ามเอาไปใช้กับตัวเลขหรือกราฟ — ความหมายของสีในแอพคือ interest/principal เท่านั้น */
+  --color-brand-blue: #2061b0;
+  --color-brand-green: #26a087;
+
   --font-display: 'Anuphan', system-ui, sans-serif;
   --font-body: 'IBM Plex Sans Thai', system-ui, sans-serif;
 

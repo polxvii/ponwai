@@ -145,7 +145,8 @@ export function assessCompleteness(d: OfferDraft, common: CommonTerms): Complete
 // ---------- แปลงเป็น LoanOffer ----------
 
 const num = (v: number | '' | undefined): number => (typeof v === 'number' ? v : 0)
-const sat = (v: number | '' | undefined): Satang => baht(num(v))
+/** baht() รับทศนิยมไม่เกิน 2 ตำแหน่ง — ช่องกรอกยอมให้พิมพ์ละเอียดกว่านั้นได้ จึงต้องปัดก่อน */
+const sat = (v: number | '' | undefined): Satang => baht(Math.round(num(v) * 100) / 100)
 
 export function toLoanOffer(d: OfferDraft, common: CommonTerms): LoanOffer {
   const preset = BANK_PRESETS.find((b) => b.code === d.bankCode)
@@ -206,7 +207,7 @@ export function toLoanOffer(d: OfferDraft, common: CommonTerms): LoanOffer {
   return {
     bankCode: d.bankCode,
     ...(preset ? { productName: preset.nameTh } : {}),
-    loanAmountSatang: baht(loanAmount),
+    loanAmountSatang: sat(common.loanAmount),
     termMonths: common.termYears * 12,
     startDate,
     dueDayOfMonth: common.dueDayOfMonth,
