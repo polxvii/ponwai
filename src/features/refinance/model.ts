@@ -13,6 +13,14 @@ import {
   type RefinanceContext, type RefinanceScenario,
 } from '@engine/refinance.js'
 import type { RateStep } from '@engine/types.js'
+import { mergeShape } from '@/lib/persist'
+import { OTHER_BANK, bankName } from '../compare/model'
+
+/** ชื่อที่จะโชว์ในตาราง — ผู้ให้กู้ที่ไม่อยู่ในรายการให้พิมพ์เอง */
+export function refiBankName(r: RefiDraft): string {
+  if (r.bankCode === OTHER_BANK) return r.customName.trim() || 'ธนาคารอื่น'
+  return bankName(r.bankCode)
+}
 
 /** สภาพหนี้ปัจจุบัน — ตัวเลขทั้งหมดเป็นบาท */
 export type CurrentLoan = {
@@ -42,6 +50,8 @@ export type RetentionDraft = {
 /** ข้อเสนอจากธนาคารใหม่ */
 export type RefiDraft = {
   bankCode: string
+  /** ใช้เมื่อ bankCode = OTHER_BANK เท่านั้น */
+  customName: string
   promoRates: (number | '')[]
   floatingRate: number | ''
   /** ค่างวดตามใบเสนอของธนาคารใหม่ */
@@ -85,6 +95,7 @@ export const DEFAULT_RETENTION: RetentionDraft = {
 
 export const DEFAULT_REFI: RefiDraft = {
   bankCode: 'SCB',
+  customName: '',
   promoRates: [3.0, 3.0, 3.0],
   floatingRate: 5.5,
   installment: 15_000,
@@ -195,7 +206,7 @@ export function buildScenarios(
   if (num(r.installment) < num(c.installment)) {
     out.push({
       kind: 'refinance',
-      label: `ย้ายธนาคาร แต่คงค่างวดเดิม ${num(c.installment).toLocaleString('en-US')}`,
+      label: `ย้ายไป${refiBankName(r)} แต่คงค่างวดเดิม ${num(c.installment).toLocaleString('en-US')}`,
       rateSteps: refiSteps,
       installmentSatang: sat(c.installment),
       termMonths: r.termYears * 12,
@@ -216,4 +227,18 @@ export function refiReady(c: CurrentLoan, r: RefiDraft): boolean {
     num(r.installment) > 0 &&
     r.promoRates.some((x) => typeof x === 'number')
   )
+}
+
+// ---------- อ่านของที่เก็บไว้ในเครื่อง ----------
+
+export const reviveCurrent = (raw: unknown) => mergeShape(raw, DEFAULT_CURRENT)
+export const reviveRetention = (raw: unknown) => {
+  const merged = mergeShape(raw, DEFAULT_RETENTION)
+  if (merged && !Array.isArray(merged.promoRates)) merged.promoRates = DEFAULT_RETENTION.promoRates
+  return merged
+}
+export const reviveRefi = (raw: unknown) => {
+  const merged = mergeShape(raw, DEFAULT_REFI)
+  if (merged && !Array.isArray(merged.promoRates)) merged.promoRates = DEFAULT_REFI.promoRates
+  return merged
 }

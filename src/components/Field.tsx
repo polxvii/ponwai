@@ -167,3 +167,24 @@ export function DateField({
     />
   )
 }
+
+/** ช่องกรอกข้อความ เช่น ชื่อธนาคารที่ไม่อยู่ในรายการ */
+export function TextField({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+}) {
+  return (
+    <input
+      type="text"
+      className={inputClass.replace('text-right', 'text-left').replace(' num tabular-nums', '')}
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  )
+}

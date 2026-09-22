@@ -11,7 +11,6 @@ import {
 } from 'recharts'
 import type { RankedOffer } from '@engine/compare.js'
 import { bahtRounded } from '@/lib/format'
-import { bankName } from './model'
 
 /** สีของเส้นแต่ละธนาคาร — ไล่จากคู่สีหลัก ไม่เอา rainbow palette */
 const SERIES_COLORS = [
@@ -19,13 +18,17 @@ const SERIES_COLORS = [
   'var(--color-principal-text)',
   'var(--color-ok)',
   'var(--color-warn)',
+  'var(--color-ink-2)',
 ] as const
 
 export function CostCurveChart({
   ranked,
+  nameOf,
   months = 360,
 }: {
   ranked: readonly RankedOffer[]
+  /** engine รู้จักข้อเสนอด้วย id ไม่ใช่รหัสธนาคาร */
+  nameOf: (key: string) => string
   months?: number
 }) {
   const feasible = ranked.filter((r) => r.feasible)
@@ -79,7 +82,7 @@ export function CostCurveChart({
             <Tooltip
               formatter={(v, name) => [
                 `${Math.round(Number(v)).toLocaleString('en-US')} บาท`,
-                bankName(String(name)),
+                nameOf(String(name)),
               ]}
               labelFormatter={(m) => `งวดที่ ${String(m)}`}
               contentStyle={{
@@ -89,7 +92,7 @@ export function CostCurveChart({
                 fontSize: 13,
               }}
             />
-            <Legend formatter={(v: string) => bankName(v)} wrapperStyle={{ fontSize: 13 }} />
+            <Legend formatter={(v: string) => nameOf(v)} wrapperStyle={{ fontSize: 13 }} />
             {feasible.map((r, i) => (
               <Line
                 key={r.bankCode}
@@ -121,9 +124,11 @@ function compactNumber(v: number): string {
 export function SensitivityBand({
   bands,
   flips,
+  nameOf,
 }: {
   bands: readonly { deltaBps: number; ranked: RankedOffer[] }[]
   flips: readonly { deltaBps: number; from: string; to: string }[]
+  nameOf: (key: string) => string
 }) {
   if (bands.length === 0) return null
 
@@ -152,7 +157,7 @@ export function SensitivityBand({
                   <td className="py-2 pr-4 num">
                     {b.deltaBps === 0 ? 'ปัจจุบัน' : `${b.deltaBps > 0 ? '+' : ''}${(b.deltaBps / 100).toFixed(2)}%`}
                   </td>
-                  <td className="py-2 pr-4">{bankName(top.bankCode)}</td>
+                  <td className="py-2 pr-4">{nameOf(top.bankCode)}</td>
                   <td className="py-2 text-right num">{bahtRounded(top.netPositionFixed)}</td>
                 </tr>
               )
@@ -168,7 +173,7 @@ export function SensitivityBand({
             <span key={i}>
               {i > 0 && ' · '}
               เมื่อ MRR ขยับ {f.deltaBps > 0 ? '+' : ''}{(f.deltaBps / 100).toFixed(2)}%{' '}
-              {bankName(f.from)} แพ้ {bankName(f.to)}
+              {nameOf(f.from)} แพ้ {nameOf(f.to)}
             </span>
           ))}
         </p>

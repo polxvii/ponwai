@@ -5,24 +5,38 @@
  * ⛔ ห้ามตัด "ไม่ทำอะไร" ออกจากตาราง — เป็น baseline เดียวที่บอกได้ว่าย้ายแล้วคุ้มจริงไหม
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { compareRefinanceOptions, recommend, type RefinanceOutcome } from '@engine/refinance.js'
 import type { Satang } from '@engine/money.js'
 import { isoDate } from '@engine/date.js'
-import { Field, NumberField, SelectField, Toggle, DateField } from '@/components/Field'
+import { Field, NumberField, SelectField, TextField, Toggle, DateField } from '@/components/Field'
+import { useLocalState } from '@/lib/persist'
 import { baht, bahtRounded, formatDuration, formatThaiDate } from '@/lib/format'
-import { BANK_PRESETS } from '../compare/model'
+import { BANK_OPTIONS, OTHER_BANK } from '../compare/model'
 import { InterestCurveChart } from './InterestCurveChart'
 import {
   DEFAULT_CURRENT, DEFAULT_RETENTION, DEFAULT_REFI,
   buildScenarios, contextOf, penaltyOf, refiMovingCost, refiReady,
+  reviveCurrent, reviveRetention, reviveRefi,
   type CurrentLoan, type RetentionDraft, type RefiDraft,
 } from './model'
 
 export function RefinancePage() {
-  const [current, setCurrent] = useState<CurrentLoan>(DEFAULT_CURRENT)
-  const [retention, setRetention] = useState<RetentionDraft>(DEFAULT_RETENTION)
-  const [refi, setRefi] = useState<RefiDraft>(DEFAULT_REFI)
+  const [current, setCurrent, resetCurrent] = useLocalState<CurrentLoan>(
+    'refi:current', DEFAULT_CURRENT, reviveCurrent,
+  )
+  const [retention, setRetention, resetRetention] = useLocalState<RetentionDraft>(
+    'refi:retention', DEFAULT_RETENTION, reviveRetention,
+  )
+  const [refi, setRefi, resetRefi] = useLocalState<RefiDraft>(
+    'refi:offer', DEFAULT_REFI, reviveRefi,
+  )
+
+  const resetAll = () => {
+    resetCurrent()
+    resetRetention()
+    resetRefi()
+  }
 
   const { outcomes, best, warnings, error } = useMemo(() => {
     const empty = {
@@ -49,11 +63,19 @@ export function RefinancePage() {
 
   return (
     <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
-      <header className="mb-8">
-        <h1 className="text-[var(--text-hero)]">รีไฟแนนซ์คุ้มไหม</h1>
-        <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
-          เทียบ 3 ทางพร้อมกันเสมอ — อยู่เฉย ๆ / ขอลดดอกกับธนาคารเดิม / ย้ายธนาคาร
-        </p>
+      <header className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[var(--text-hero)]">รีไฟแนนซ์คุ้มไหม</h1>
+          <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+            เทียบ 3 ทางพร้อมกันเสมอ — อยู่เฉย ๆ / ขอลดดอกกับธนาคารเดิม / ย้ายธนาคาร
+          </p>
+        </div>
+        <button
+          onClick={resetAll}
+          className="tap shrink-0 text-[var(--text-meta)] text-[var(--color-ink-3)] hover:text-[var(--color-ink-2)] hover:underline"
+        >
+          เริ่มใหม่
+        </button>
       </header>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] lg:gap-10">
@@ -378,12 +400,21 @@ function RefiForm({
         <SelectField
           value={r.bankCode}
           onChange={(v) => onChange({ bankCode: v })}
-          options={BANK_PRESETS.map((b) => ({
-            value: b.code,
-            label: b.isSfi ? `${b.nameTh} (รัฐ)` : b.nameTh,
-          }))}
+          options={BANK_OPTIONS}
         />
       </Field>
+
+      {r.bankCode === OTHER_BANK && (
+        <div className="mt-3">
+          <Field label="ชื่อผู้ให้กู้" hint="ใช้ชื่อนี้ในตารางผลลัพธ์">
+            <TextField
+              value={r.customName}
+              onChange={(v) => onChange({ customName: v })}
+              placeholder="เช่น สหกรณ์ออมทรัพย์ครู"
+            />
+          </Field>
+        </div>
+      )}
 
       <div className="mt-3 grid grid-cols-3 gap-2">
         {r.promoRates.map((x, i) => (

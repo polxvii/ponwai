@@ -9,15 +9,17 @@
 import type { RankedOffer } from '@engine/compare.js'
 import type { Fixed } from '@engine/money.js'
 import { bahtFixed, bahtRounded, baht, pct, formatPeriods } from '@/lib/format'
-import { bankName } from './model'
 import { SplitBar } from '@/components/SplitBar'
 
 export function ResultsTable({
   ranked,
   horizonMonths,
+  nameOf,
 }: {
   ranked: readonly RankedOffer[]
   horizonMonths: number
+  /** engine รู้จักข้อเสนอด้วย id ไม่ใช่รหัสธนาคาร — แปลงกลับเป็นชื่อที่หน้าเรียกใช้ */
+  nameOf: (key: string) => string
 }) {
   if (ranked.length === 0) return null
   const best = ranked.find((r) => r.feasible)
@@ -27,7 +29,7 @@ export function ResultsTable({
       {/* มือถือ: การ์ดเรียงลง / desktop: ตารางจริง */}
       <div className="grid gap-4 lg:hidden">
         {ranked.map((r) => (
-          <OfferCardMobile key={r.bankCode} r={r} best={best} horizonMonths={horizonMonths} />
+          <OfferCardMobile key={r.bankCode} r={r} best={best} horizonMonths={horizonMonths} nameOf={nameOf} />
         ))}
       </div>
 
@@ -61,7 +63,7 @@ export function ResultsTable({
               >
                 <td className="py-3 pr-4 num">{r.feasible ? r.rank : '—'}</td>
                 <td className="py-3 pr-4">
-                  <span className="font-medium">{bankName(r.bankCode)}</span>
+                  <span className="font-medium">{nameOf(r.bankCode)}</span>
                   {r.rank === 1 && r.feasible && (
                     <span className="ml-2 rounded-sm bg-[var(--color-principal-tint)] px-1.5 py-0.5 text-[var(--text-micro)] text-[var(--color-principal-text)]">
                       ถูกที่สุด
@@ -88,7 +90,7 @@ export function ResultsTable({
           <p className="mt-3 text-[var(--text-meta)] text-[var(--color-warn)]">
             {ranked.filter((r) => !r.feasible).map((r) => (
               <span key={r.bankCode} className="block">
-                {bankName(r.bankCode)}: {r.infeasibleReason}
+                {nameOf(r.bankCode)}: {r.infeasibleReason}
               </span>
             ))}
           </p>
@@ -119,10 +121,12 @@ function OfferCardMobile({
   r,
   best,
   horizonMonths,
+  nameOf,
 }: {
   r: RankedOffer
   best: RankedOffer | undefined
   horizonMonths: number
+  nameOf: (key: string) => string
 }) {
   const gap = best && r.bankCode !== best.bankCode
     ? ((r.netPositionFixed - best.netPositionFixed) as Fixed)
@@ -139,7 +143,7 @@ function OfferCardMobile({
       <header className="flex items-baseline justify-between">
         <h3 className="text-[var(--text-lead)]">
           {r.feasible && <span className="num mr-2 text-[var(--color-ink-3)]">{r.rank}</span>}
-          {bankName(r.bankCode)}
+          {nameOf(r.bankCode)}
         </h3>
         {r.rank === 1 && r.feasible && (
           <span className="text-[var(--text-meta)] text-[var(--color-principal-text)]">

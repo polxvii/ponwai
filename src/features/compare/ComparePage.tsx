@@ -1,29 +1,59 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { rankOffers, sensitivityBand, findRankFlips } from '@engine/compare.js'
 import { baht as toSatang } from '@engine/money.js'
-import { Field, NumberField, SelectField, Toggle } from '@/components/Field'
+import { Field, NumberField, SelectField, TextField, Toggle } from '@/components/Field'
+import { useLocalState } from '@/lib/persist'
 import { ResultsTable } from './ResultsTable'
 import { CostCurveChart, SensitivityBand } from './CostCurveChart'
 import {
-  BANK_PRESETS, DEFAULT_COMMON, emptyDraft, toLoanOffer, assessCompleteness, bankName,
+  BANK_OPTIONS, DEFAULT_COMMON, DEFAULT_DRAFTS, MAX_OFFERS, MIN_OFFERS, OTHER_BANK,
+  emptyDraft, nextBankCode, offerLabel, toLoanOffer, assessCompleteness,
+  reviveCommon, reviveDrafts,
   type OfferDraft, type CommonTerms,
 } from './model'
 
 const HORIZON = 36
 
 export function ComparePage() {
-  const [common, setCommon] = useState<CommonTerms>(DEFAULT_COMMON)
-  const [drafts, setDrafts] = useState<OfferDraft[]>([
-    { ...emptyDraft('a', 'KBANK'), promoRates: [2.5, 3.25, 3.75], floatingRate: 5.5, installment: 20_000, appraisalFee: 3_000 },
-    { ...emptyDraft('b', 'SCB'),   promoRates: [2.9, 2.9, 3.4],   floatingRate: 5.3, installment: 20_000, appraisalFee: 3_000, otherFee: 9_000 },
-  ])
+  const [common, setCommon, resetCommon] = useLocalState<CommonTerms>(
+    'compare:common', DEFAULT_COMMON, reviveCommon,
+  )
+  const [drafts, setDrafts, resetDrafts] = useLocalState<OfferDraft[]>(
+    'compare:offers', DEFAULT_DRAFTS, reviveDrafts,
+  )
 
   // Equal-Payment Mode — ฟีเจอร์หลักที่ทำให้แอพนี้ต่าง (ข้อ 2.2)
-  const [equalPayment, setEqualPayment] = useState(true)
-  const [lockedPayment, setLockedPayment] = useState<number | ''>(20_000)
+  const [equalPayment, setEqualPayment, resetEqual] = useLocalState('compare:equalPayment', true)
+  const [lockedPayment, setLockedPayment, resetLocked] = useLocalState<number | ''>(
+    'compare:lockedPayment', 20_000,
+  )
 
   const update = (id: string, patch: Partial<OfferDraft>) =>
     setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...patch } : d)))
+
+  const addOffer = () =>
+    setDrafts((ds) => {
+      if (ds.length >= MAX_OFFERS) return ds
+      const code = nextBankCode(ds.map((d) => d.bankCode))
+      // id ต้องไม่ซ้ำตลอดอายุของ list ใช้เวลาเป็นฐาน ไม่ใช่ ds.length ที่ชนกันได้หลังลบ
+      return [...ds, emptyDraft(`o${Date.now().toString(36)}`, code)]
+    })
+
+  const removeOffer = (id: string) =>
+    setDrafts((ds) => (ds.length <= MIN_OFFERS ? ds : ds.filter((d) => d.id !== id)))
+
+  const resetAll = () => {
+    resetCommon()
+    resetDrafts()
+    resetEqual()
+    resetLocked()
+  }
+
+  /** ตาราง/กราฟ รู้จักข้อเสนอด้วย id ไม่ใช่รหัสธนาคาร — แปลงกลับเป็นชื่อที่ตรงนี้ */
+  const nameOf = useMemo(() => {
+    const map = new Map(drafts.map((d) => [d.id, offerLabel(d)]))
+    return (key: string) => map.get(key) ?? key
+  }, [drafts])
 
   const { ranked, bands, flips, error } = useMemo(() => {
     try {
@@ -45,18 +75,26 @@ export function ComparePage() {
   }, [drafts, common, equalPayment, lockedPayment])
 
   const missing = drafts.flatMap((d) =>
-    assessCompleteness(d, common).missing.map((m) => ({ ...m, bank: bankName(d.bankCode) })),
+    assessCompleteness(d, common).missing.map((m) => ({ ...m, bank: offerLabel(d) })),
   )
 
   return (
     // ⛔ ห้ามครอบ max-width แบบมือถือที่ระดับบนสุด (ข้อ 5A.1)
     //    max-width ของ content อยู่ที่ 1440 ไม่ใช่ 480
     <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
-      <header className="mb-8">
-        <h1 className="text-[var(--text-hero)]">เปรียบเทียบข้อเสนอ</h1>
-        <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
-          จ่ายเท่ากันทุกธนาคาร แล้วดูว่าใครทำให้หนี้เหลือน้อยกว่า
-        </p>
+      <header className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[var(--text-hero)]">เปรียบเทียบข้อเสนอ</h1>
+          <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+            จ่ายเท่ากันทุกธนาคาร แล้วดูว่าใครทำให้หนี้เหลือน้อยกว่า
+          </p>
+        </div>
+        <button
+          onClick={resetAll}
+          className="tap shrink-0 text-[var(--text-meta)] text-[var(--color-ink-3)] hover:text-[var(--color-ink-2)] hover:underline"
+        >
+          เริ่มใหม่
+        </button>
       </header>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] lg:gap-10">
@@ -97,9 +135,28 @@ export function ComparePage() {
             )}
           </section>
 
-          {drafts.map((d) => (
-            <OfferForm key={d.id} draft={d} onChange={(p) => update(d.id, p)} />
+          {drafts.map((d, i) => (
+            <OfferForm
+              key={d.id}
+              index={i}
+              draft={d}
+              onChange={(p) => update(d.id, p)}
+              {...(drafts.length > MIN_OFFERS ? { onRemove: () => removeOffer(d.id) } : {})}
+            />
           ))}
+
+          {drafts.length < MAX_OFFERS ? (
+            <button
+              onClick={addOffer}
+              className="tap w-full rounded-lg border border-dashed border-[var(--color-rule)] py-3 text-[var(--color-interest)] hover:border-[var(--color-interest)] hover:bg-[var(--color-interest-tint)]"
+            >
+              + เพิ่มธนาคาร
+            </button>
+          ) : (
+            <p className="text-center text-[var(--text-meta)] text-[var(--color-ink-3)]">
+              เทียบพร้อมกันได้สูงสุด {MAX_OFFERS} ธนาคาร
+            </p>
+          )}
         </div>
 
         {/* ---------- ฝั่งผลลัพธ์ ---------- */}
@@ -118,7 +175,7 @@ export function ComparePage() {
 
           {ranked.length > 0 && (
             <>
-              <ResultsTable ranked={ranked} horizonMonths={HORIZON} />
+              <ResultsTable ranked={ranked} horizonMonths={HORIZON} nameOf={nameOf} />
 
               {/* ให้ผลลัพธ์ตั้งแต่ยังกรอกไม่ครบ พร้อมบอกว่าที่ขาดกระทบเท่าไหร่ (ข้อ 5A.3) */}
               {missing.length > 0 && (
@@ -134,8 +191,8 @@ export function ComparePage() {
                 </aside>
               )}
 
-              <CostCurveChart ranked={ranked} />
-              <SensitivityBand bands={bands} flips={flips} />
+              <CostCurveChart ranked={ranked} nameOf={nameOf} />
+              <SensitivityBand bands={bands} flips={flips} nameOf={nameOf} />
             </>
           )}
         </div>
@@ -145,11 +202,15 @@ export function ComparePage() {
 }
 
 function OfferForm({
+  index,
   draft,
   onChange,
+  onRemove,
 }: {
+  index: number
   draft: OfferDraft
   onChange: (patch: Partial<OfferDraft>) => void
+  onRemove?: () => void
 }) {
   const setRate = (i: number, v: number | '') => {
     const next = [...draft.promoRates]
@@ -159,16 +220,40 @@ function OfferForm({
 
   return (
     <section className="rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[var(--text-micro)] text-[var(--color-ink-3)]">
+          ข้อเสนอที่ {index + 1}
+        </span>
+        {onRemove && (
+          <button
+            onClick={onRemove}
+            aria-label={`ลบข้อเสนอที่ ${index + 1}`}
+            className="tap text-[var(--text-meta)] text-[var(--color-ink-3)] hover:text-[var(--color-warn)]"
+          >
+            ลบ
+          </button>
+        )}
+      </div>
+
       <Field label="ธนาคาร">
         <SelectField
           value={draft.bankCode}
           onChange={(v) => onChange({ bankCode: v })}
-          options={BANK_PRESETS.map((b) => ({
-            value: b.code,
-            label: b.isSfi ? `${b.nameTh} (รัฐ)` : b.nameTh,
-          }))}
+          options={BANK_OPTIONS}
         />
       </Field>
+
+      {draft.bankCode === OTHER_BANK && (
+        <div className="mt-3">
+          <Field label="ชื่อผู้ให้กู้" hint="ใช้ชื่อนี้ในตารางและกราฟ">
+            <TextField
+              value={draft.customName}
+              onChange={(v) => onChange({ customName: v })}
+              placeholder="เช่น สหกรณ์ออมทรัพย์ครู"
+            />
+          </Field>
+        </div>
+      )}
 
       {/* กรอกเรตเป็น "ปีที่" ไม่ใช่ from_month/to_month (ข้อ 5A.3 วิธีที่ 2) */}
       <div className="mt-3 grid grid-cols-3 gap-2">

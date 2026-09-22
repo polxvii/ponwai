@@ -36,10 +36,21 @@ export const BANK_PRESETS: readonly BankPreset[] = [
   { code: 'BAAC',  nameTh: 'ธ.ก.ส.',           isSfi: true },
 ] as const
 
+/** ธนาคารที่ไม่อยู่ในรายการ — ผู้ใช้พิมพ์ชื่อเอง (ผู้ให้กู้ท้องถิ่น สหกรณ์ หรือแบงก์ที่เพิ่งเข้าตลาด) */
+export const OTHER_BANK = 'OTHER'
+
+/** ตัวเลือกในช่องเลือกธนาคาร — มี "อื่น ๆ" ต่อท้ายเสมอ */
+export const BANK_OPTIONS: readonly { value: string; label: string }[] = [
+  ...BANK_PRESETS.map((b) => ({ value: b.code, label: b.isSfi ? `${b.nameTh} (รัฐ)` : b.nameTh })),
+  { value: OTHER_BANK, label: 'อื่น ๆ — พิมพ์ชื่อเอง' },
+]
+
 /** สิ่งที่ผู้ใช้กรอกจริง ทุกจำนวนเงินเป็นบาท */
 export type OfferDraft = {
   id: string
   bankCode: string
+  /** ใช้เมื่อ bankCode = OTHER_BANK เท่านั้น */
+  customName: string
   /** เรตรายปีของช่วงโปร เป็น % เช่น 2.5 */
   promoRates: (number | '')[]
   /** เรตหลังพ้นโปร */
@@ -66,6 +77,7 @@ export function emptyDraft(id: string, bankCode: string): OfferDraft {
   return {
     id,
     bankCode,
+    customName: '',
     promoRates: ['', '', ''],
     floatingRate: '',
     installment: '',
@@ -82,6 +94,27 @@ export function emptyDraft(id: string, bankCode: string): OfferDraft {
     fireWaivedYears: 0,
     lockinMonths: 36,
   }
+}
+
+/** เทียบพร้อมกันได้สูงสุดกี่ธนาคาร — เกินกว่านี้กราฟอ่านไม่ออกและสีเส้นเริ่มซ้ำ */
+export const MAX_OFFERS = 5
+/** ต่ำกว่านี้ไม่เรียกว่าเปรียบเทียบ */
+export const MIN_OFFERS = 2
+
+export const DEFAULT_DRAFTS: OfferDraft[] = [
+  { ...emptyDraft('a', 'KBANK'), promoRates: [2.5, 3.25, 3.75], floatingRate: 5.5, installment: 20_000, appraisalFee: 3_000 },
+  { ...emptyDraft('b', 'SCB'),   promoRates: [2.9, 2.9, 3.4],   floatingRate: 5.3, installment: 20_000, appraisalFee: 3_000, otherFee: 9_000 },
+]
+
+/** ธนาคารถัดไปที่ยังไม่ถูกเลือก — กันเพิ่มแล้วได้ธนาคารซ้ำ */
+export function nextBankCode(used: readonly string[]): string {
+  return BANK_PRESETS.find((b) => !used.includes(b.code))?.code ?? OTHER_BANK
+}
+
+/** ชื่อที่จะโชว์ในตารางและกราฟ */
+export function offerLabel(d: OfferDraft): string {
+  if (d.bankCode === OTHER_BANK) return d.customName.trim() || 'ธนาคารอื่น'
+  return bankName(d.bankCode)
 }
 
 /** ข้อมูลที่ใช้ร่วมกันทุกข้อเสนอ — ต้องเท่ากันหมด ไม่งั้นเทียบคนละฐาน */
@@ -149,7 +182,6 @@ const num = (v: number | '' | undefined): number => (typeof v === 'number' ? v :
 const sat = (v: number | '' | undefined): Satang => baht(Math.round(num(v) * 100) / 100)
 
 export function toLoanOffer(d: OfferDraft, common: CommonTerms): LoanOffer {
-  const preset = BANK_PRESETS.find((b) => b.code === d.bankCode)
   const loanAmount = num(common.loanAmount)
 
   const promo = d.promoRates
@@ -205,8 +237,10 @@ export function toLoanOffer(d: OfferDraft, common: CommonTerms): LoanOffer {
   const startDate = common.startDate
 
   return {
-    bankCode: d.bankCode,
-    ...(preset ? { productName: preset.nameTh } : {}),
+    // ⛔ ห้ามใช้ bankCode เป็นคีย์ — เทียบ 2 ผลิตภัณฑ์ของแบงก์เดียวกัน หรือเลือก "อื่น ๆ"
+    //    สองอันจะชนกันทันที เพราะ engine ใช้ bankCode เป็น identity ของข้อเสนอ
+    bankCode: d.id,
+    productName: offerLabel(d),
     loanAmountSatang: sat(common.loanAmount),
     termMonths: common.termYears * 12,
     startDate,
@@ -246,4 +280,31 @@ export function toLoanOffer(d: OfferDraft, common: CommonTerms): LoanOffer {
 
 export function bankName(code: string): string {
   return BANK_PRESETS.find((b) => b.code === code)?.nameTh ?? code
+}
+
+// ---------- อ่านของที่เก็บไว้ในเครื่อง ----------
+
+/**
+ * ของที่เก็บไว้อาจมาจากเวอร์ชันก่อนที่ยังไม่มีบางฟิลด์
+ * เติมจาก default ให้ครบเสมอ ไม่งั้น `undefined` จะหลุดเข้า engine แล้วพังตอนคำนวณ
+ */
+export function reviveDrafts(raw: unknown): OfferDraft[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null
+  const out = raw
+    .filter((d): d is Partial<OfferDraft> => typeof d === 'object' && d !== null)
+    .slice(0, MAX_OFFERS)
+    .map((d, i) => {
+      const base = emptyDraft(d.id ?? String(i), d.bankCode ?? BANK_PRESETS[0]!.code)
+      if (typeof d.customName !== 'string') delete d.customName
+      const merged = { ...base, ...d }
+      // promoRates ต้องเป็น array เสมอ ถ้าของเก่าเพี้ยนให้กลับไปใช้ของ default
+      if (!Array.isArray(merged.promoRates)) merged.promoRates = base.promoRates
+      return merged
+    })
+  return out.length > 0 ? out : null
+}
+
+export function reviveCommon(raw: unknown): CommonTerms | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
+  return { ...DEFAULT_COMMON, ...(raw as Partial<CommonTerms>) }
 }
