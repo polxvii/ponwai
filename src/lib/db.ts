@@ -1,8 +1,12 @@
 /**
  * ชั้นเข้าถึงข้อมูลใน Supabase (schema ponwai)
  *
- * ⚠️ ทุก query ผ่าน RLS อยู่แล้ว — ⛔ ห้ามใส่ .eq('user_id', ...) เองซ้ำ
- *    policy กรองให้แล้ว การเติมเองทำให้เผลอเปิดช่องถ้าวันหนึ่งลืมเติม
+ * ⚠️ ตอนอ่าน RLS กรองด้วย auth.uid() ให้แล้ว — ⛔ ห้ามใส่ .eq('user_id', ...) เองซ้ำ
+ *
+ * ⚠️ ตอนเขียนกลับกัน ต้องส่ง user_id ไปเองเสมอ
+ *    `with check (user_id = auth.uid())` เป็นการ "ตรวจ" ไม่ใช่ "เติม"
+ *    ถ้าไม่ส่งไป ค่าจะเป็น null แล้วโดนปฏิเสธด้วย 42501 ซึ่งอ่านเหมือนเรื่องสิทธิ์
+ *    ทั้งที่ต้นเหตุคือลืมใส่ค่า
  *
  * ⚠️ bigint ของ Postgres กลับมาเป็น number ของ JS ผ่าน PostgREST
  *    ปลอดภัยเพราะ 2^53 สตางค์ = 9 หมื่นล้านล้านบาท แต่ต้องแปลงเป็น BigInt
@@ -20,6 +24,14 @@ import type { DayCountBasis } from '@engine/accrual.js'
 import type { RoundingMode } from '@engine/money.js'
 
 const sat = (n: number | null | undefined): Satang => BigInt(Math.round(n ?? 0)) as Satang
+
+/** อ่านจาก session ในเครื่อง ไม่ยิงเน็ต — ใช้เติม user_id ตอน insert */
+async function currentUserId(): Promise<string> {
+  const { data } = await supabase.auth.getSession()
+  const id = data.session?.user.id
+  if (!id) throw new Error('ต้องเข้าสู่ระบบก่อนบันทึกข้อมูล')
+  return id
+}
 
 /** โยน error ที่อ่านรู้เรื่อง แทนที่จะปล่อย object ดิบของ PostgREST ขึ้นไปถึง UI */
 function must<T>(res: { data: T | null; error: { message: string; code?: string } | null }): T {
@@ -134,7 +146,8 @@ export async function createLoan(input: NewLoanInput): Promise<string> {
   const property = must(
     await supabase
       .from('properties')
-      .insert({ name: input.propertyName })
+      // user_id ต้องส่งไปเอง ดูหมายเหตุหัวไฟล์
+      .insert({ user_id: await currentUserId(), name: input.propertyName })
       .select('id')
       .single(),
   ) as { id: string }

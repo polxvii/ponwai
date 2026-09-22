@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "test:live": "vitest run src/lib/db.live.test.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260702.1",
