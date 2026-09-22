@@ -15,9 +15,9 @@ export function Field({
   suffix,
 }: {
   label: string
-  hint?: string
+  hint?: string | undefined
   children: ReactNode
-  suffix?: string
+  suffix?: string | undefined
 }) {
   return (
     <label className="block">

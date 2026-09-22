@@ -7,7 +7,7 @@ import { ResultsTable } from './ResultsTable'
 import { CostCurveChart, SensitivityBand } from './CostCurveChart'
 import {
   BANK_OPTIONS, DEFAULT_COMMON, DEFAULT_DRAFTS, MAX_OFFERS, MIN_OFFERS, OTHER_BANK,
-  emptyDraft, nextBankCode, offerLabel, toLoanOffer, assessCompleteness,
+  emptyDraft, nextBankCode, offerLabel, promoYears, toLoanOffer, assessCompleteness,
   reviveCommon, reviveDrafts,
   type OfferDraft, type CommonTerms,
 } from './model'
@@ -27,6 +27,10 @@ export function ComparePage() {
   const [lockedPayment, setLockedPayment, resetLocked] = useLocalState<number | ''>(
     'compare:lockedPayment', 20_000,
   )
+
+  /** ล็อกจริงเมื่อเปิดสวิตช์ "และ" มีตัวเลขที่ใช้ได้ — ไม่งั้นค่างวดของแต่ละข้อเสนอยังมีผล */
+  const locked =
+    equalPayment && typeof lockedPayment === 'number' && lockedPayment > 0 ? lockedPayment : null
 
   const update = (id: string, patch: Partial<OfferDraft>) =>
     setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...patch } : d)))
@@ -58,12 +62,12 @@ export function ComparePage() {
   const { ranked, bands, flips, error } = useMemo(() => {
     try {
       const offers = drafts.map((d) => toLoanOffer(d, common))
-      const ready = drafts.every((d) => assessCompleteness(d, common).ready)
+      const ready = drafts.every((d) => assessCompleteness(d, common, locked !== null).ready)
       if (!ready) return { ranked: [], bands: [], flips: [], error: null }
 
       const opts =
-        equalPayment && typeof lockedPayment === 'number' && lockedPayment > 0
-          ? { equalPaymentSatang: toSatang(lockedPayment), horizonMonths: HORIZON }
+        locked !== null
+          ? { equalPaymentSatang: toSatang(locked), horizonMonths: HORIZON }
           : { horizonMonths: HORIZON }
 
       const ranked = rankOffers(offers, opts)
@@ -72,10 +76,13 @@ export function ComparePage() {
     } catch (e) {
       return { ranked: [], bands: [], flips: [], error: (e as Error).message }
     }
-  }, [drafts, common, equalPayment, lockedPayment])
+  }, [drafts, common, locked])
 
   const missing = drafts.flatMap((d) =>
-    assessCompleteness(d, common).missing.map((m) => ({ ...m, bank: offerLabel(d) })),
+    assessCompleteness(d, common, locked !== null).missing.map((m) => ({
+      ...m,
+      bank: offerLabel(d),
+    })),
   )
 
   return (
@@ -128,7 +135,11 @@ export function ComparePage() {
             />
             {equalPayment && (
               <div className="mt-2">
-                <Field label="ค่างวดที่จะจ่ายจริงต่อเดือน" suffix="บาท">
+                <Field
+                  label="ค่างวดที่จะจ่ายจริงต่อเดือน"
+                  suffix="บาท"
+                  hint="ตัวเลขนี้เป็นตัวขับการคำนวณทั้งหมด ค่างวดในใบเสนอของแต่ละธนาคารจะกลายเป็นข้อมูลอ้างอิง"
+                >
                   <NumberField value={lockedPayment} onChange={setLockedPayment} />
                 </Field>
               </div>
@@ -140,6 +151,8 @@ export function ComparePage() {
               key={d.id}
               index={i}
               draft={d}
+              termYears={common.termYears}
+              lockedPayment={locked}
               onChange={(p) => update(d.id, p)}
               {...(drafts.length > MIN_OFFERS ? { onRemove: () => removeOffer(d.id) } : {})}
             />
@@ -204,11 +217,16 @@ export function ComparePage() {
 function OfferForm({
   index,
   draft,
+  termYears,
+  lockedPayment,
   onChange,
   onRemove,
 }: {
   index: number
   draft: OfferDraft
+  termYears: number
+  /** ไม่ null = ล็อกค่างวดอยู่ ค่างวดในช่องนี้จะไม่ถูกใช้คำนวณ */
+  lockedPayment: number | null
   onChange: (patch: Partial<OfferDraft>) => void
   onRemove?: () => void
 }) {
@@ -217,6 +235,8 @@ function OfferForm({
     next[i] = v
     onChange({ promoRates: next })
   }
+
+  const floatingYears = Math.max(0, termYears - promoYears(draft))
 
   return (
     <section className="rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4">
@@ -265,10 +285,22 @@ function OfferForm({
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-3">
-        <Field label="หลังพ้นโปร" suffix="%" hint="กินเวลา 27 ปีจาก 30">
+        <Field
+          label="หลังพ้นโปร"
+          suffix="%"
+          hint={
+            floatingYears > 0
+              ? `กินเวลา ${floatingYears} ปีจาก ${termYears}`
+              : 'สัญญาจบก่อนพ้นโปร อัตรานี้ไม่ถูกใช้'
+          }
+        >
           <NumberField value={draft.floatingRate} onChange={(v) => onChange({ floatingRate: v })} />
         </Field>
-        <Field label="ค่างวดจากใบเสนอ" suffix="บาท">
+        <Field
+          label={lockedPayment === null ? 'ค่างวดที่จะจ่าย' : 'ค่างวดจากใบเสนอ'}
+          suffix="บาท"
+          hint={quoteHint(draft.installment, lockedPayment)}
+        >
           <NumberField value={draft.installment} onChange={(v) => onChange({ installment: v })} />
         </Field>
       </div>
@@ -325,4 +357,21 @@ function OfferForm({
       </details>
     </section>
   )
+}
+
+/**
+ * ตอนล็อกค่างวด ช่องนี้ไม่ถูกใช้คำนวณ ต้องบอกตรง ๆ ไม่ใช่ปล่อยให้พิมพ์แล้วผลไม่ขยับ
+ * ส่วนต่างเป็นข้อมูลที่มีประโยชน์เอง เพราะการจ่ายเกินค่างวดคือกลยุทธ์หลักของแอพนี้
+ */
+function quoteHint(quoted: number | '', locked: number | null): string | undefined {
+  if (locked === null) return undefined
+  if (typeof quoted !== 'number' || quoted <= 0) {
+    return `ไม่ถูกใช้คำนวณ เพราะล็อกค่างวดไว้ที่ ${locked.toLocaleString('en-US')}`
+  }
+  const diff = locked - quoted
+  if (diff === 0) return 'เท่ากับค่างวดที่ล็อกไว้'
+  const amount = Math.abs(diff).toLocaleString('en-US')
+  return diff > 0
+    ? `คุณจะจ่าย ${locked.toLocaleString('en-US')} มากกว่าใบเสนอ ${amount} — ส่วนเกินลดเงินต้นทั้งก้อน`
+    : `คุณจะจ่าย ${locked.toLocaleString('en-US')} ต่ำกว่าใบเสนอ ${amount} — ธนาคารอาจไม่ยอม`
 }

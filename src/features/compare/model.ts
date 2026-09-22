@@ -145,7 +145,12 @@ export type Completeness = {
  * ให้ผลลัพธ์ตั้งแต่ยังกรอกไม่ครบ แล้วบอกว่าที่ขาดอาจคลาดเคลื่อนเท่าไหร่
  * ดีกว่าบังคับให้กรอก 40-50 ช่องก่อนถึงจะเห็นอะไรเลย
  */
-export function assessCompleteness(d: OfferDraft, common: CommonTerms): Completeness {
+export function assessCompleteness(
+  d: OfferDraft,
+  common: CommonTerms,
+  /** true = ล็อกค่างวดไว้แล้ว ค่างวดของข้อเสนอนี้จึงไม่จำเป็นต่อการคำนวณ */
+  hasLockedPayment = false,
+): Completeness {
   const missing: Completeness['missing'] = []
   const loan = typeof common.loanAmount === 'number' ? common.loanAmount : 0
 
@@ -167,8 +172,7 @@ export function assessCompleteness(d: OfferDraft, common: CommonTerms): Complete
 
   const ready =
     typeof common.loanAmount === 'number' &&
-    typeof d.installment === 'number' &&
-    d.installment > 0 &&
+    (hasLockedPayment || (typeof d.installment === 'number' && d.installment > 0)) &&
     typeof d.floatingRate === 'number' &&
     d.promoRates.some((r) => typeof r === 'number')
 
@@ -307,4 +311,9 @@ export function reviveDrafts(raw: unknown): OfferDraft[] | null {
 export function reviveCommon(raw: unknown): CommonTerms | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
   return { ...DEFAULT_COMMON, ...(raw as Partial<CommonTerms>) }
+}
+
+/** จำนวนปีที่มีเรตโปร — ใช้บอกว่าเรตลอยตัวกินเวลาเท่าไหร่ของสัญญา */
+export function promoYears(d: OfferDraft): number {
+  return d.promoRates.filter((r) => typeof r === 'number').length
 }
