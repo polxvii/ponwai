@@ -4,6 +4,7 @@ import { AuthProvider, useAuth, signOut } from './lib/auth'
 import { SignInDialog } from './features/auth/SignInDialog'
 import { ComparePage } from './features/compare/ComparePage'
 import { RefinancePage } from './features/refinance/RefinancePage'
+import { TrackPage } from './features/track/TrackPage'
 
 /**
  * 2 โหมดหลัก ใช้ engine คำนวณตัวเดียวกัน (spec ข้อ 0)
@@ -15,11 +16,12 @@ import { RefinancePage } from './features/refinance/RefinancePage'
  * ทั้งสองโหมดใช้ได้โดยไม่ต้องล็อกอิน — เป็นเครื่องคิดเลข ไม่มีข้อมูลส่วนตัว
  * การบันทึกและ Track Mode ถึงจะต้องมีบัญชี
  */
-type Tab = 'compare' | 'refinance'
+type Tab = 'compare' | 'refinance' | 'track'
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: 'compare', label: 'เปรียบเทียบ', hint: 'ก่อนเซ็นสัญญา' },
   { id: 'refinance', label: 'รีไฟแนนซ์', hint: 'ผ่อนอยู่แล้ว' },
+  { id: 'track', label: 'ติดตาม', hint: 'สัญญาของฉัน' },
 ]
 
 export function App() {
@@ -63,7 +65,9 @@ function Shell() {
         </div>
       </nav>
 
-      {tab === 'compare' ? <ComparePage /> : <RefinancePage />}
+      {tab === 'compare' && <ComparePage />}
+      {tab === 'refinance' && <RefinancePage />}
+      {tab === 'track' && <TrackPage onSignIn={() => setSigningIn(true)} />}
 
       {signingIn && <SignInDialog onClose={() => setSigningIn(false)} />}
     </>

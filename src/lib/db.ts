@@ -227,6 +227,8 @@ export type LoanFull = {
   loan: LoanRow
   rateSteps: RateStep[]
   conventions: LoanConvention[]
+  /** true = ยังไม่มีใบแจ้งยอดมายืนยันวิธีคิดดอก UI ต้องเตือน ไม่ใช่เงียบ (ข้อ 9.1) */
+  conventionAssumed: boolean
   scheduleOverrides: Record<number, ISODate>
   payments: StoredPayment[]
   bankHolidays: ISODate[]
@@ -287,12 +289,15 @@ export async function getLoanFull(loanId: string): Promise<LoanFull> {
         },
   )
 
-  const conventions = (must(convRows) as {
+  const convData = must(convRows) as {
     effective_from: string
     day_count_basis: DayCountBasis
     interest_rounding: RoundingMode
     capitalise_unpaid_interest: boolean
-  }[]).map((c): LoanConvention => ({
+    confidence: 'confirmed' | 'assumed'
+  }[]
+
+  const conventions = convData.map((c): LoanConvention => ({
     effectiveFrom: isoDate(c.effective_from),
     dayCountBasis: c.day_count_basis,
     rounding: c.interest_rounding,
@@ -322,6 +327,7 @@ export async function getLoanFull(loanId: string): Promise<LoanFull> {
     loan,
     rateSteps,
     conventions,
+    conventionAssumed: convData.some((c) => c.confidence === 'assumed'),
     scheduleOverrides,
     payments,
     bankHolidays: (holidays as { holiday_date: string }[]).map((h) => isoDate(h.holiday_date)),
