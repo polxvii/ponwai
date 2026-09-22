@@ -16,6 +16,11 @@ import {
   addPayment, createLoan, deleteLoan, getLoanFull, listLoans, removePayment,
   toLoanTerms, toPaymentEvents,
 } from './db'
+
+function must<T>(res: { data: T | null; error: unknown }): T {
+  if (res.error) throw new Error(JSON.stringify(res.error))
+  return res.data as T
+}
 import { buildSchedule } from '@engine/schedule.js'
 import { formatFixedBaht, baht, bps, type Satang } from '@engine/money.js'
 import { isoDate } from '@engine/date.js'
@@ -177,7 +182,9 @@ describe.skipIf(EMAIL === '' || PASSWORD === '')('db.ts กับ Supabase จ�
     expect(upd.error).not.toBeNull()
   }, 30_000)
 
-  it('deleteLoan ลบสัญญาและลูกทั้งหมด', async () => {
+  it('deleteLoan ลบสัญญา ลูก และทรัพย์สินที่ไม่เหลือสัญญา', async () => {
+    const propertyId = (await getLoanFull(loanId)).loan.property_id
+
     await deleteLoan(loanId)
     const items = await listLoans()
     expect(items.find((i) => i.loanId === loanId)).toBeUndefined()
@@ -185,6 +192,29 @@ describe.skipIf(EMAIL === '' || PASSWORD === '')('db.ts กับ Supabase จ�
     const orphanPayments = await supabase.from('payments').select('id').eq('loan_id', loanId)
     expect(orphanPayments.data ?? []).toHaveLength(0)
 
+    // ⚠️ จุดที่เคยพลาด: ลบแค่ active_loans แล้ว properties ลอยอยู่เป็นขยะที่ UI มองไม่เห็น
+    const orphanProperty = await supabase.from('properties').select('id').eq('id', propertyId)
+    expect(orphanProperty.data ?? []).toHaveLength(0)
+
+    const orphanOffers = await supabase
+      .from('loan_offers')
+      .select('id')
+      .eq('property_id', propertyId)
+    expect(orphanOffers.data ?? []).toHaveLength(0)
+
     loanId = ''
+  }, 30_000)
+
+  it('ไม่มีทรัพย์สินค้างจากการทดสอบรอบก่อน ๆ', async () => {
+    const stray = must(
+      await supabase.from('properties').select('id, name'),
+    ) as { id: string; name: string }[]
+    if (stray.length > 0) {
+      // เก็บขยะที่เกิดจาก deleteLoan เวอร์ชันเก่า
+      for (const p of stray) await supabase.from('properties').delete().eq('id', p.id)
+      console.log('เก็บทรัพย์สินค้าง', stray.map((p) => p.name))
+    }
+    const after = must(await supabase.from('properties').select('id')) as unknown[]
+    expect(after).toHaveLength(0)
   }, 30_000)
 })

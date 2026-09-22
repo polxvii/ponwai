@@ -229,9 +229,36 @@ export async function createLoan(input: NewLoanInput): Promise<string> {
   }
 }
 
+/**
+ * ลบสัญญา แล้วเก็บทรัพย์สินที่ไม่มีสัญญาเหลืออยู่ทิ้งด้วย
+ *
+ * ⚠️ ลบแค่ active_loans จะเหลือ properties กับ loan_offers ลอยอยู่เป็นขยะ
+ *    ที่ UI มองไม่เห็น เพราะรายการสัญญา query จาก active_loans
+ *    ทรัพย์สินหนึ่งมีได้หลายสัญญา (โซ่รีไฟแนนซ์) จึงลบเฉพาะตอนไม่เหลือสัญญาแล้ว
+ */
 export async function deleteLoan(loanId: string): Promise<void> {
+  const target = await supabase
+    .from('active_loans')
+    .select('property_id')
+    .eq('id', loanId)
+    .single()
+  if (target.error) throw new Error(translateDbError(target.error))
+  const propertyId = (target.data as { property_id: string }).property_id
+
   const res = await supabase.from('active_loans').delete().eq('id', loanId)
   if (res.error) throw new Error(translateDbError(res.error))
+
+  const left = await supabase
+    .from('active_loans')
+    .select('id')
+    .eq('property_id', propertyId)
+    .limit(1)
+  if (left.error) throw new Error(translateDbError(left.error))
+  if ((left.data ?? []).length === 0) {
+    // cascade เก็บ loan_offers ให้เอง
+    const drop = await supabase.from('properties').delete().eq('id', propertyId)
+    if (drop.error) throw new Error(translateDbError(drop.error))
+  }
 }
 
 // ---------- อ่านสัญญาเต็ม ----------
