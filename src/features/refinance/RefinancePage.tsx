@@ -120,6 +120,16 @@ export function RefinancePage() {
               )}
 
               <OutcomeTable outcomes={outcomes} best={best} />
+
+              {/* ผู้ใช้กรอก 2 ทาง แล้วเห็น 4 แถว ต้องบอกว่าอีก 2 มาจากไหน ไม่ใช่ปล่อยให้เดา */}
+              {outcomes.some((o) => o.autoAdded) && (
+                <p className="mt-3 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+                  แถวที่ติดป้าย &quot;แอพเติมให้&quot; ไม่ได้มาจากที่คุณกรอก —{' '}
+                  <b className="font-medium">ไม่ทำอะไร</b> คือฐานเทียบที่ต้องมีเสมอ และ{' '}
+                  <b className="font-medium">คงค่างวดเดิม</b> คือย้ายธนาคารแล้วจ่ายเท่าที่จ่ายอยู่
+                  ไม่ลดค่างวดลง ซึ่งธนาคารไม่เสนอให้ แต่มักเป็นทางที่ถูกที่สุด
+                </p>
+              )}
               <InterestCurveChart outcomes={outcomes} />
             </>
           )}
@@ -221,6 +231,18 @@ function OutcomeTable({
                   {isBest && (
                     <span className="ml-2 rounded-sm bg-[var(--color-principal-tint)] px-1.5 py-0.5 text-[var(--text-micro)] text-[var(--color-principal-text)]">
                       ถูกที่สุด
+                    </span>
+                  )}
+                  {o.autoAdded && (
+                    <span
+                      className="ml-2 rounded-sm border border-[var(--color-rule)] px-1.5 py-0.5 text-[var(--text-micro)] text-[var(--color-ink-3)]"
+                      title={
+                        o.kind === 'stay'
+                          ? 'ฐานเทียบที่ต้องมีเสมอ ถ้าไม่มีก็บอกไม่ได้ว่าการย้ายคุ้มจริงไหม'
+                          : 'ทางที่ธนาคารไม่เสนอ แต่มักถูกที่สุด — ย้ายแล้วจ่ายเท่าที่จ่ายอยู่ ไม่ลดค่างวด'
+                      }
+                    >
+                      แอพเติมให้
                     </span>
                   )}
                   {!o.feasible && (

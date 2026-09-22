@@ -174,6 +174,7 @@ export function buildScenarios(
       termMonths: c.remainingMonths,
       movingCostSatang: 0n as Satang,
       lockinMonths: 0,
+      autoAdded: true,
     },
   ]
 
@@ -195,7 +196,7 @@ export function buildScenarios(
 
   out.push({
     kind: 'refinance',
-    label: `ย้ายธนาคาร ค่างวด ${num(r.installment).toLocaleString('en-US')} / ${r.termYears} ปี`,
+    label: `ย้ายไป${refiBankName(r)} ค่างวด ${num(r.installment).toLocaleString('en-US')} / ${r.termYears} ปี`,
     rateSteps: refiSteps,
     installmentSatang: sat(r.installment),
     termMonths: r.termYears * 12,
@@ -212,6 +213,7 @@ export function buildScenarios(
       termMonths: r.termYears * 12,
       movingCostSatang: cost,
       lockinMonths: r.lockinMonths,
+      autoAdded: true,
     })
   }
 

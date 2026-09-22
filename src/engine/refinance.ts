@@ -29,6 +29,11 @@ export type RefinanceScenario = {
   movingCostSatang: Satang
   /** lock-in ของข้อเสนอนี้ ใช้ตรวจว่าคืนทุนทันไหม */
   lockinMonths: number
+  /**
+   * true = แอพเติมแถวนี้ให้เอง ผู้ใช้ไม่ได้กรอก
+   * ต้องบอกใน UI ไม่งั้นผู้ใช้กรอก 2 ทาง แล้วเห็น 4 แถว โดยไม่รู้ว่าอีก 2 มาจากไหน
+   */
+  autoAdded?: boolean
 }
 
 export type MovingCostInput = {
@@ -93,6 +98,8 @@ export type RefinanceOutcome = {
    */
   feasible: boolean
   infeasibleReason?: string
+  /** แอพเติมแถวนี้ให้เอง ไม่ได้มาจากที่ผู้ใช้กรอก */
+  autoAdded: boolean
   /**
    * ค่างวดขั้นต่ำที่ปิดหนี้ได้ภายในเทอมที่ขอ
    * feasible = true จะเท่ากับค่างวดที่กรอกมา เพราะพอจ่ายอยู่แล้ว
@@ -185,6 +192,7 @@ export function compareRefinanceOptions(
       // ⚠️ กับดักยืดเทอม: ค่างวดถูกลงแต่จ่ายดอกรวมมากกว่าไม่ทำอะไร (ข้อ 2A.2)
       costsMoreThanStaying: sc.kind !== 'stay' && saved < 0n && infeasibleReason === undefined,
       feasible: infeasibleReason === undefined,
+      autoAdded: sc.autoAdded ?? false,
       ...(infeasibleReason ? { infeasibleReason } : {}),
       minInstallmentSatang: minInstallment,
       rows: r.rows,
