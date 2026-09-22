@@ -5,12 +5,13 @@
  * บังคับล็อกอินก่อนเห็นอะไรเลย = ผู้ใช้ที่แค่อยากลองคำนวณจะปิดทิ้ง
  *
  * รองรับ 2 ทาง
- *   Google   ไม่ต้องจำรหัสผ่าน แต่ต้องเปิด provider ใน Supabase ก่อน
+ *   Google   แสดงปุ่มเฉพาะเมื่อเปิด provider ไว้จริง ดู fetchEnabledProviders
  *   อีเมล    ใช้ได้ทันทีโดยไม่ต้องตั้งค่าอะไรเพิ่ม
  */
 
-import { useState, type FormEvent } from 'react'
-import { supabase } from '@/lib/supabase'
+import { useEffect, useState, type FormEvent } from 'react'
+import { supabase, getRememberMe, setRememberMe } from '@/lib/supabase'
+import { fetchEnabledProviders } from '@/lib/auth'
 
 type Mode = 'signin' | 'signup'
 
@@ -20,10 +21,35 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null)
+  /** null = ยังไม่รู้ ห้ามเดาว่ามี ไม่งั้นปุ่มจะกะพริบแล้วหายไป */
+  const [providers, setProviders] = useState<Set<string> | null>(null)
+  const [remember, setRemember] = useState(getRememberMe)
+
+  useEffect(() => {
+    let alive = true
+    fetchEnabledProviders().then((p) => alive && setProviders(p))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  /**
+   * ปลดล็อกปุ่มเมื่อกลับมาจากหน้าอื่น
+   *
+   * ⚠️ กด OAuth แล้วเบราว์เซอร์ออกไปทั้งที่ busy = true พอกด Back
+   *    Firefox คืนหน้าจาก bfcache พร้อม state เดิม ปุ่มทุกปุ่มค้าง disabled
+   *    แล้วผู้ใช้กดอะไรไม่ได้เลยโดยไม่มีข้อความบอกสาเหตุ
+   */
+  useEffect(() => {
+    const unlock = () => setBusy(false)
+    window.addEventListener('pageshow', unlock)
+    return () => window.removeEventListener('pageshow', unlock)
+  }, [])
 
   async function withGoogle() {
     setBusy(true)
     setMessage(null)
+    setRememberMe(remember)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin },
@@ -37,6 +63,16 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
 
   async function withEmail(e: FormEvent) {
     e.preventDefault()
+
+    // ตรวจเองก่อน ไม่พึ่ง required ของเบราว์เซอร์อย่างเดียว
+    // เพราะถ้า validation ของเบราว์เซอร์บล็อก ผู้ใช้จะเห็นแค่ "กดแล้วไม่มีอะไรเกิดขึ้น"
+    if (email.trim() === '') return setMessage({ tone: 'warn', text: 'กรอกอีเมล' })
+    if (password.length < 6) {
+      return setMessage({ tone: 'warn', text: 'รหัสผ่านต้องยาวอย่างน้อย 6 ตัว' })
+    }
+
+    // ต้องตั้งก่อนล็อกอิน เพราะ storage อ่านค่านี้ตอนเขียน session
+    setRememberMe(remember)
     setBusy(true)
     setMessage(null)
 
@@ -72,28 +108,31 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
           ข้อมูลสินเชื่อเป็นเรื่องส่วนตัว บัญชีนี้ทำให้เห็นได้เฉพาะคุณคนเดียว
         </p>
 
-        <button
-          type="button"
-          onClick={withGoogle}
-          disabled={busy}
-          className="tap mt-5 flex w-full items-center justify-center gap-2 rounded-md border border-[var(--color-rule)] px-3 py-2.5 hover:bg-[var(--color-paper)] disabled:opacity-50"
-        >
-          <GoogleG />
-          ใช้บัญชี Google
-        </button>
+        {providers?.has('google') && (
+          <>
+            <button
+              type="button"
+              onClick={withGoogle}
+              disabled={busy}
+              className="tap mt-5 flex w-full items-center justify-center gap-2 rounded-md border border-[var(--color-rule)] px-3 py-2.5 hover:bg-[var(--color-paper)] disabled:opacity-50"
+            >
+              <GoogleG />
+              ใช้บัญชี Google
+            </button>
 
-        <div className="my-4 flex items-center gap-3 text-[var(--text-meta)] text-[var(--color-ink-3)]">
-          <span className="h-px flex-1 bg-[var(--color-rule)]" />
-          หรือ
-          <span className="h-px flex-1 bg-[var(--color-rule)]" />
-        </div>
+            <div className="my-4 flex items-center gap-3 text-[var(--text-meta)] text-[var(--color-ink-3)]">
+              <span className="h-px flex-1 bg-[var(--color-rule)]" />
+              หรือ
+              <span className="h-px flex-1 bg-[var(--color-rule)]" />
+            </div>
+          </>
+        )}
 
-        <form onSubmit={withEmail} className="space-y-3">
+        <form onSubmit={withEmail} className={providers?.has('google') ? 'space-y-3' : 'mt-5 space-y-3'}>
           <label className="block">
             <span className="block text-[var(--text-meta)] text-[var(--color-ink-2)]">อีเมล</span>
             <input
               type="email"
-              required
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -104,8 +143,6 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
             <span className="block text-[var(--text-meta)] text-[var(--color-ink-2)]">รหัสผ่าน</span>
             <input
               type="password"
-              required
-              minLength={6}
               autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -113,12 +150,29 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
             />
           </label>
 
+          <label className="tap flex cursor-pointer items-start gap-2 py-1">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              className="mt-0.5 size-4 shrink-0 accent-[var(--color-interest)]"
+            />
+            <span className="text-[var(--text-meta)]">
+              จำฉันไว้
+              <span className="block text-[var(--color-ink-3)]">
+                {remember
+                  ? 'เปิดแอพครั้งหน้าไม่ต้องล็อกอินใหม่'
+                  : 'ออกจากระบบเองเมื่อปิดแท็บ — เหมาะกับเครื่องที่ใช้ร่วมกับคนอื่น'}
+              </span>
+            </span>
+          </label>
+
           <button
             type="submit"
             disabled={busy}
             className="tap w-full rounded-md bg-[var(--color-interest)] px-3 py-2.5 text-[var(--color-panel-ink)] disabled:opacity-50"
           >
-            {mode === 'signin' ? 'เข้าสู่ระบบ' : 'สมัครใช้งาน'}
+            {busy ? 'กำลังดำเนินการ…' : mode === 'signin' ? 'เข้าสู่ระบบ' : 'สมัครใช้งาน'}
           </button>
         </form>
 

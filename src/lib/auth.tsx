@@ -11,7 +11,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
-import { supabase } from './supabase'
+import { supabase, supabasePublishableKey, supabaseUrl } from './supabase'
 
 type AuthState = {
   /** null = ยังไม่ได้ล็อกอิน, undefined ไม่มี — loading แยกตัวแปร */
@@ -53,4 +53,31 @@ export function useAuth(): AuthState {
 
 export async function signOut(): Promise<void> {
   await supabase.auth.signOut()
+}
+
+/**
+ * provider ที่เปิดใช้อยู่จริงในโครงการ
+ *
+ * ⚠️ จำเป็น ไม่ใช่ของแถม — signInWithOAuth ไม่ได้ยิง API แล้วรอผล
+ *    มันเซ็ต window.location.href ไปที่ GoTrue ตรง ๆ ถ้า provider ปิด
+ *    GoTrue ตอบ JSON 400 แล้วเบราว์เซอร์แสดง JSON ดิบให้ผู้ใช้เห็น
+ *    โค้ดแปล error ฝั่งเราไม่มีโอกาสทำงานเพราะออกจากหน้าไปแล้ว
+ *    ทางเดียวคือไม่แสดงปุ่มที่กดไปแล้วพัง
+ */
+export async function fetchEnabledProviders(): Promise<Set<string>> {
+  try {
+    const res = await fetch(`${supabaseUrl}/auth/v1/settings`, {
+      headers: { apikey: supabasePublishableKey },
+    })
+    if (!res.ok) return new Set()
+    const json = (await res.json()) as { external?: Record<string, boolean> }
+    return new Set(
+      Object.entries(json.external ?? {})
+        .filter(([, on]) => on)
+        .map(([name]) => name),
+    )
+  } catch {
+    // ออฟไลน์หรือ endpoint เปลี่ยน — ถือว่าไม่มี provider นอก ยังล็อกอินด้วยอีเมลได้
+    return new Set()
+  }
 }
