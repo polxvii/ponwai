@@ -8,11 +8,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { baht, formatDuration, formatThaiDate } from '@/lib/format'
-import { deleteLoan, listLoans, type LoanListItem } from '@/lib/db'
+import { deleteLoan, getAllLoansFull, type LoanListItem } from '@/lib/db'
+import { DashboardPage, type LoanBundle } from '../dashboard/DashboardPage'
 import { LoanForm } from './LoanForm'
 import { LoanDetail } from './LoanDetail'
+import { todayISO } from './model'
 
-type View = { kind: 'list' } | { kind: 'new' } | { kind: 'detail'; item: LoanListItem }
+/**
+ * Dashboard เป็นหน้าแรกเมื่อมีสัญญาแล้ว ไม่ใช่รายการสัญญา
+ * เพราะคนที่ผ่อนอยู่เปิดแอพมาเพื่อดูว่า "ตอนนี้เหลือเท่าไหร่" ไม่ใช่เพื่อเลือกสัญญา
+ */
+type View =
+  | { kind: 'dashboard' }
+  | { kind: 'list' }
+  | { kind: 'new' }
+  | { kind: 'detail'; item: LoanListItem }
 
 export function TrackPage({ onSignIn }: { onSignIn: () => void }) {
   const { user, loading } = useAuth()
@@ -48,28 +58,43 @@ export function TrackPage({ onSignIn }: { onSignIn: () => void }) {
 }
 
 function TrackShell() {
-  const [view, setView] = useState<View>({ kind: 'list' })
-  const [items, setItems] = useState<LoanListItem[] | null>(null)
+  const [view, setView] = useState<View>({ kind: 'dashboard' })
+  const [bundles, setBundles] = useState<LoanBundle[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const reload = useCallback(() => {
     setError(null)
-    listLoans()
-      .then(setItems)
+    getAllLoansFull()
+      .then(setBundles)
       .catch((e: Error) => setError(e.message))
   }, [])
 
   useEffect(reload, [reload])
+
+  const items = bundles?.map((b) => b.item) ?? null
 
   if (view.kind === 'detail') {
     return (
       <LoanDetail
         item={view.item}
         onBack={() => {
-          setView({ kind: 'list' })
+          setView({ kind: 'dashboard' })
           reload()
         }}
       />
+    )
+  }
+
+  if (view.kind === 'dashboard' && bundles !== null && bundles.length > 0) {
+    return (
+      <>
+        <SubNav view="dashboard" onChange={(v) => setView({ kind: v })} />
+        <DashboardPage
+          bundles={bundles}
+          today={todayISO()}
+          onOpenLoan={(item) => setView({ kind: 'detail', item })}
+        />
+      </>
     )
   }
 
@@ -88,7 +113,11 @@ function TrackShell() {
   }
 
   return (
-    <Shell>
+    <>
+      {items !== null && items.length > 0 && (
+        <SubNav view="list" onChange={(v) => setView({ kind: v })} />
+      )}
+      <Shell>
       <header className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-[var(--text-hero)]">สินเชื่อของฉัน</h1>
@@ -142,7 +171,38 @@ function TrackShell() {
           ))}
         </ul>
       )}
-    </Shell>
+      </Shell>
+    </>
+  )
+}
+
+function SubNav({
+  view,
+  onChange,
+}: {
+  view: 'dashboard' | 'list'
+  onChange: (v: 'dashboard' | 'list') => void
+}) {
+  return (
+    <div className="mx-auto flex max-w-[1440px] gap-1 px-4 pt-4 sm:px-6 lg:px-8">
+      {([
+        { id: 'dashboard' as const, label: 'ภาพรวม' },
+        { id: 'list' as const, label: 'สัญญาทั้งหมด' },
+      ]).map((t) => (
+        <button
+          key={t.id}
+          onClick={() => onChange(t.id)}
+          aria-current={view === t.id ? 'page' : undefined}
+          className={`tap rounded-md px-3 py-1.5 text-[var(--text-meta)] ${
+            view === t.id
+              ? 'bg-[var(--color-interest-tint)] text-[var(--color-interest)]'
+              : 'text-[var(--color-ink-2)] hover:text-[var(--color-ink)]'
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
   )
 }
 

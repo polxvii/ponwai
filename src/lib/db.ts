@@ -374,6 +374,16 @@ export async function getLoanFull(loanId: string): Promise<LoanFull> {
   }
 }
 
+/**
+ * โหลดทุกสัญญาแบบเต็ม — Dashboard ต้องรวมทุกหลัง (ข้อ 11 ข้อ 2)
+ * และเพดานลดหย่อนภาษีต้องคิดข้ามสัญญา ซึ่งทำไม่ได้ถ้าโหลดมาทีละอัน (ข้อ 1.9)
+ */
+export async function getAllLoansFull(): Promise<{ item: LoanListItem; full: LoanFull }[]> {
+  const items = await listLoans()
+  const fulls = await Promise.all(items.map((i) => getLoanFull(i.loanId)))
+  return items.map((item, i) => ({ item, full: fulls[i]! }))
+}
+
 /** แปลงเป็นสิ่งที่ engine รับ — ที่เดียวที่รู้จักทั้งรูปแบบ DB และรูปแบบ engine */
 export function toLoanTerms(f: LoanFull): LoanTerms {
   return {

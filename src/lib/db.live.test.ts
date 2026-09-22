@@ -25,6 +25,9 @@ import { buildSchedule } from '@engine/schedule.js'
 import { formatFixedBaht, baht, bps, type Satang } from '@engine/money.js'
 import { isoDate } from '@engine/date.js'
 
+/** ทุกทรัพย์สินที่เทสต์สร้างต้องขึ้นต้นด้วยคำนี้ ใช้แยกจากข้อมูลตัวอย่างที่ตั้งใจเก็บไว้ */
+const FIXTURE_PREFIX = '[เทสต์]'
+
 const EMAIL = process.env['PONWAI_TEST_EMAIL'] ?? ''
 const PASSWORD = process.env['PONWAI_TEST_PASSWORD'] ?? ''
 
@@ -51,7 +54,7 @@ afterAll(async () => {
 describe.skipIf(EMAIL === '' || PASSWORD === '')('db.ts กับ Supabase จริง', () => {
   it('createLoan เขียนครบ 5 ตาราง', async () => {
     loanId = await createLoan({
-      propertyName: 'ทดสอบ — ลบได้',
+      propertyName: `${FIXTURE_PREFIX} ลบได้`,
       bankCode: 'KBANK',
       bankName: 'กสิกรไทย',
       contractDate: isoDate('2024-03-01'),
@@ -77,7 +80,7 @@ describe.skipIf(EMAIL === '' || PASSWORD === '')('db.ts กับ Supabase จ�
     const items = await listLoans()
     const mine = items.find((i) => i.loanId === loanId)
     expect(mine).toBeDefined()
-    expect(mine!.propertyName).toBe('ทดสอบ — ลบได้')
+    expect(mine!.propertyName).toBe(`${FIXTURE_PREFIX} ลบได้`)
     expect(mine!.bankLabel).toBe('กสิกรไทย')
     expect(Number(mine!.disbursedSatang)).toBe(300_000_000)
   }, 30_000)
@@ -205,16 +208,18 @@ describe.skipIf(EMAIL === '' || PASSWORD === '')('db.ts กับ Supabase จ�
     loanId = ''
   }, 30_000)
 
-  it('ไม่มีทรัพย์สินค้างจากการทดสอบรอบก่อน ๆ', async () => {
+  it('ไม่มีทรัพย์สินของเทสต์ค้างจากรอบก่อน ๆ', async () => {
+    // ⛔ ห้ามลบทุก property — บัญชีทดสอบมีข้อมูลตัวอย่างไว้ดู Dashboard ด้วย
+    //    กรองด้วยชื่อที่ fixture ใช้เท่านั้น
     const stray = must(
-      await supabase.from('properties').select('id, name'),
+      await supabase.from('properties').select('id, name').like('name', `${FIXTURE_PREFIX}%`),
     ) as { id: string; name: string }[]
-    if (stray.length > 0) {
-      // เก็บขยะที่เกิดจาก deleteLoan เวอร์ชันเก่า
-      for (const p of stray) await supabase.from('properties').delete().eq('id', p.id)
-      console.log('เก็บทรัพย์สินค้าง', stray.map((p) => p.name))
-    }
-    const after = must(await supabase.from('properties').select('id')) as unknown[]
+    for (const p of stray) await supabase.from('properties').delete().eq('id', p.id)
+    if (stray.length > 0) console.log('เก็บทรัพย์สินค้าง', stray.map((p) => p.name))
+
+    const after = must(
+      await supabase.from('properties').select('id').like('name', `${FIXTURE_PREFIX}%`),
+    ) as unknown[]
     expect(after).toHaveLength(0)
   }, 30_000)
 })

@@ -35,41 +35,68 @@ export const supabasePublishableKey = key
  */
 const REMEMBER_KEY = 'ponwai:auth:remember'
 
+/**
+ * ⚠️ ห้ามอ้าง localStorage/sessionStorage ตรง ๆ
+ *    ไฟล์นี้ถูก import ในเทสต์ที่รันบน Node ซึ่งไม่มีทั้งสองตัว
+ *    อ้างตรง ๆ แล้วจะได้ ReferenceError ตอน import ไม่ใช่ตอนเรียกใช้
+ *    และพังทั้งไฟล์ก่อนที่เทสต์ตัวแรกจะได้รัน
+ */
+/**
+ * ที่เก็บสำรองในหน่วยความจำ
+ * ใช้เมื่อไม่มี Web Storage เลย เช่นตอนรันเทสต์บน Node
+ * ถ้าไม่มีตัวนี้ getSession() จะคืนค่าว่างทั้งที่ล็อกอินสำเร็จ
+ * เพราะ supabase-js อ่าน session จาก storage ไม่ใช่จากตัวแปรในหน่วยความจำ
+ */
+const memoryStore = new Map<string, string>()
+
+function store(kind: 'local' | 'session'): Storage | null {
+  if (typeof globalThis === 'undefined') return null
+  try {
+    const s = kind === 'local' ? globalThis.localStorage : globalThis.sessionStorage
+    return s ?? null
+  } catch {
+    return null
+  }
+}
+
 export function setRememberMe(on: boolean): void {
   try {
-    localStorage.setItem(REMEMBER_KEY, on ? '1' : '0')
+    store('local')?.setItem(REMEMBER_KEY, on ? '1' : '0')
   } catch {
     /* โหมดส่วนตัวเขียนไม่ได้ ถือว่าไม่จำ */
   }
 }
 
 export function getRememberMe(): boolean {
-  try {
-    // ค่าตั้งต้นคือจำ เพราะเป็นแอพที่เปิดซ้ำทุกเดือน ไม่ใช่เครื่องสาธารณะ
-    return localStorage.getItem(REMEMBER_KEY) !== '0'
-  } catch {
-    return false
-  }
+  // ค่าตั้งต้นคือจำ เพราะเป็นแอพที่เปิดซ้ำทุกเดือน ไม่ใช่เครื่องสาธารณะ
+  return store('local')?.getItem(REMEMBER_KEY) !== '0'
 }
 
-const sessionStore: Storage | undefined =
-  typeof window === 'undefined' ? undefined : window.sessionStorage
+const hasWebStorage = (): boolean => store('local') !== null || store('session') !== null
 
 const switchableStorage = {
-  getItem: (k: string): string | null =>
-    localStorage.getItem(k) ?? sessionStore?.getItem(k) ?? null,
+  getItem: (k: string): string | null => {
+    if (!hasWebStorage()) return memoryStore.get(k) ?? null
+    return store('local')?.getItem(k) ?? store('session')?.getItem(k) ?? null
+  },
   setItem: (k: string, v: string): void => {
+    if (!hasWebStorage()) {
+      memoryStore.set(k, v)
+      return
+    }
+    // ลบอีกฝั่งทุกครั้ง ไม่งั้นค่าเก่าค้างแล้วกลายเป็น "จำ" ทั้งที่ไม่ได้ติ๊ก
     if (getRememberMe()) {
-      localStorage.setItem(k, v)
-      sessionStore?.removeItem(k)
+      store('local')?.setItem(k, v)
+      store('session')?.removeItem(k)
     } else {
-      sessionStore?.setItem(k, v)
-      localStorage.removeItem(k)
+      store('session')?.setItem(k, v)
+      store('local')?.removeItem(k)
     }
   },
   removeItem: (k: string): void => {
-    localStorage.removeItem(k)
-    sessionStore?.removeItem(k)
+    memoryStore.delete(k)
+    store('local')?.removeItem(k)
+    store('session')?.removeItem(k)
   },
 }
 
