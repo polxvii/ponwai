@@ -10,7 +10,8 @@
 
 import type { ISODate } from './date.js'
 import { type Satang, type Bps, type Fixed, ZERO_FIXED } from './money.js'
-import { buildSchedule } from './schedule.js'
+import { buildSchedule, pmt } from './schedule.js'
+import { findRateStep, resolveRate } from './rates.js'
 import type { LoanTerms, RateStep, ReferenceRate, LoanConvention, ScheduleRow } from './types.js'
 
 export type RefinanceOptionKind = 'stay' | 'retention' | 'refinance'
@@ -86,6 +87,17 @@ export type RefinanceOutcome = {
   breakevenBeyondLockin: boolean
   /** ⚠️ ถูกกว่าต่อเดือน แต่จ่ายดอกเบี้ยรวมมากกว่าการไม่ทำอะไรเลย */
   costsMoreThanStaying: boolean
+  /**
+   * false = ธนาคารไม่มีวันอนุมัติค่างวดนี้ ต้องตีตกให้ชัด ไม่ใช่โชว์เป็นทางเลือกหนึ่ง
+   * เกิดได้ 2 แบบ ค่างวดต่ำกว่าดอกเบี้ย (หนี้โตขึ้น) หรือผ่อนไม่จบในเทอมที่ขอ
+   */
+  feasible: boolean
+  infeasibleReason?: string
+  /**
+   * ค่างวดขั้นต่ำที่ปิดหนี้ได้ภายในเทอมที่ขอ
+   * feasible = true จะเท่ากับค่างวดที่กรอกมา เพราะพอจ่ายอยู่แล้ว
+   */
+  minInstallmentSatang: Satang
   rows: ScheduleRow[]
 }
 
@@ -141,6 +153,23 @@ export function compareRefinanceOptions(
       }
     }
 
+    // ---- ตรวจว่าเป็นทางเลือกจริงไหม ----
+    // ⛔ ห้ามปล่อยให้เคส negative amortization โผล่เป็นตัวเลขปกติ
+    //    ตอนชนเพดานงวดมันจะได้ดอกเบี้ยหลักสิบล้านและกินสเกลกราฟทั้งใบ
+    const negAmRow = r.rows.find((row) => row.flags.includes('negative_amortization'))
+    const overrunsTerm = r.rows.length > sc.termMonths || !r.paidOff
+    const infeasibleReason = negAmRow
+      ? `ค่างวดต่ำกว่าดอกเบี้ยตั้งแต่งวดที่ ${negAmRow.index} — หนี้จะโตขึ้นแทนที่จะลด`
+      : overrunsTerm
+        ? `ผ่อน ${r.rows.length} งวด เกินสัญญา ${sc.termMonths} งวดที่ขอไว้`
+        : undefined
+
+    // หาค่าเฉพาะตอนจ่ายไม่ไหว — ต้องวน buildSchedule หลายรอบ ไม่ควรจ่ายราคานี้ทุกครั้ง
+    const minInstallment =
+      infeasibleReason === undefined
+        ? sc.installmentSatang
+        : minFeasibleInstallment(ctx, sc)
+
     const last = r.rows[r.rows.length - 1]
     return {
       kind: sc.kind,
@@ -154,7 +183,10 @@ export function compareRefinanceOptions(
       breakevenMonth,
       breakevenBeyondLockin: breakevenMonth === null || breakevenMonth > sc.lockinMonths,
       // ⚠️ กับดักยืดเทอม: ค่างวดถูกลงแต่จ่ายดอกรวมมากกว่าไม่ทำอะไร (ข้อ 2A.2)
-      costsMoreThanStaying: sc.kind !== 'stay' && saved < 0n,
+      costsMoreThanStaying: sc.kind !== 'stay' && saved < 0n && infeasibleReason === undefined,
+      feasible: infeasibleReason === undefined,
+      ...(infeasibleReason ? { infeasibleReason } : {}),
+      minInstallmentSatang: minInstallment,
       rows: r.rows,
     }
   })
@@ -180,8 +212,10 @@ export function recommend(outcomes: readonly RefinanceOutcome[]): {
   best: RefinanceOutcome
   warnings: string[]
 } {
-  const viable = outcomes.filter((o) => o.kind === 'stay' || !o.breakevenBeyondLockin)
-  const pool = viable.length > 0 ? viable : outcomes
+  // จ่ายไม่ไหว = ไม่ใช่ทางเลือก ต้องตัดออกก่อนเลือก best เสมอ ไม่ใช่แค่จัดอันดับท้าย ๆ
+  const possible = outcomes.filter((o) => o.feasible)
+  const viable = possible.filter((o) => o.kind === 'stay' || !o.breakevenBeyondLockin)
+  const pool = viable.length > 0 ? viable : possible.length > 0 ? possible : outcomes
 
   const best = pool.reduce((a, b) =>
     (b.futureInterestFixed + (b.movingCostSatang * 1_000_000_000_000n)) <
@@ -189,6 +223,12 @@ export function recommend(outcomes: readonly RefinanceOutcome[]): {
 
   const warnings: string[] = []
   for (const o of outcomes) {
+    if (!o.feasible) {
+      warnings.push(
+        `"${o.label}" ${o.infeasibleReason} — ต้องจ่ายอย่างน้อย ${formatBaht(o.minInstallmentSatang)} บาทต่อเดือน`,
+      )
+      continue
+    }
     if (o.costsMoreThanStaying) {
       warnings.push(
         `"${o.label}" ค่างวดถูกลงก็จริง แต่จ่ายดอกเบี้ยรวมมากกว่าการไม่ทำอะไรเลย`,
@@ -214,4 +254,53 @@ export function prepayPenalty(
 ): Satang {
   if (monthsElapsed >= lockinMonths) return 0n as Satang
   return ((balanceSatang * BigInt(penaltyBps)) / 10_000n) as Satang
+}
+
+/** ตารางที่ได้เป็นทางเลือกจริงไหม — ไม่มีงวดที่ดอกกินค่างวดหมด และปิดหนี้ทันเทอม */
+function isFeasibleAt(ctx: RefinanceContext, sc: RefinanceScenario, installment: Satang): boolean {
+  const r = buildSchedule(termsFor(ctx, { ...sc, installmentSatang: installment }))
+  return (
+    r.paidOff &&
+    r.rows.length <= sc.termMonths &&
+    !r.rows.some((row) => row.flags.includes('negative_amortization'))
+  )
+}
+
+/**
+ * ค่างวดขั้นต่ำที่ทำให้แผนนี้เป็นไปได้จริง
+ *
+ * ⛔ ห้ามใช้ PMT ที่อัตราของงวดแรก — ข้อเสนอรีไฟแนนซ์มีโปร 3 ปีเกือบทุกอัน
+ *    ค่าที่ได้จะต่ำกว่าความจริงมาก แล้วพอพ้นโปรก็พังอยู่ดี
+ *    ต้องหาด้วยการลองจริงบนตารางเต็ม เพราะดอกคิดรายวันและอัตราเปลี่ยนกลางทาง
+ */
+function minFeasibleInstallment(ctx: RefinanceContext, sc: RefinanceScenario): Satang {
+  // ขอบบน = PMT ที่อัตราสูงสุดของสัญญา ซึ่งพอจ่ายแน่นอนเพราะอัตราจริงไม่เกินนี้
+  let hi = pmt(ctx.balanceSatang, maxRateOf(ctx, sc), sc.termMonths)
+  for (let guard = 0; guard < 8 && !isFeasibleAt(ctx, sc, hi); guard++) {
+    hi = ((hi * 3n) / 2n) as Satang
+  }
+  if (!isFeasibleAt(ctx, sc, hi)) return hi
+
+  let lo = 0n as Satang
+  // หยุดที่ความละเอียด 1 บาท ละเอียดกว่านี้ไม่มีประโยชน์กับคนอ่าน
+  while (hi - lo > 100n) {
+    const mid = ((lo + hi) / 2n) as Satang
+    if (isFeasibleAt(ctx, sc, mid)) hi = mid
+    else lo = mid
+  }
+  // ปัดขึ้นเป็นบาทเต็ม จ่ายขาดไปหนึ่งสตางค์ก็ไม่ผ่าน
+  return (((hi + 99n) / 100n) * 100n) as Satang
+}
+
+function maxRateOf(ctx: RefinanceContext, sc: RefinanceScenario): Bps {
+  let max = 0
+  for (let m = 1; m <= sc.termMonths; m += 12) {
+    const rate = resolveRate(findRateStep(sc.rateSteps, m), ctx.referenceRates, ctx.asOf)
+    if (rate > max) max = rate
+  }
+  return max as Bps
+}
+
+function formatBaht(v: Satang): string {
+  return (Number(v) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })
 }

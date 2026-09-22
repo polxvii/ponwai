@@ -18,7 +18,11 @@ const SERIES_COLORS = [
   'var(--color-principal-text)', // ย้ายแต่คงค่างวด
 ] as const
 
-export function InterestCurveChart({ outcomes }: { outcomes: readonly RefinanceOutcome[] }) {
+export function InterestCurveChart({ outcomes: all }: { outcomes: readonly RefinanceOutcome[] }) {
+  // ⛔ ห้ามวาดเส้นของเคสที่จ่ายไม่ไหว — ตอนชนเพดาน 1,200 งวดดอกจะพุ่งหลักสิบล้าน
+  //    แล้วกินสเกลแกน Y จนเส้นที่เหลือแบนติดพื้นอ่านไม่ออก
+  const outcomes = all.filter((o) => o.feasible)
+  const hidden = all.length - outcomes.length
   if (outcomes.length === 0) return null
 
   const maxLen = Math.max(...outcomes.map((o) => o.rows.length))
@@ -43,6 +47,7 @@ export function InterestCurveChart({ outcomes }: { outcomes: readonly RefinanceO
       <figcaption className="mb-1 text-[var(--text-row)]">ดอกเบี้ยสะสม + ต้นทุนการย้าย</figcaption>
       <p className="mb-4 text-[var(--text-meta)] text-[var(--color-ink-2)]">
         เส้นเริ่มจากต้นทุนการย้าย ไม่ใช่ศูนย์ — จุดที่เส้นตัดกับ &quot;ไม่ทำอะไร&quot; คือเดือนคืนทุน
+        {hidden > 0 && ` (ซ่อน ${hidden} ทางที่จ่ายไม่ไหว)`}
       </p>
 
       <div style={{ height: 320 }}>

@@ -213,7 +213,7 @@ function OutcomeTable({
               <tr
                 key={i}
                 className={`border-b border-[var(--color-rule)] ${
-                  o.costsMoreThanStaying ? 'opacity-70' : ''
+                  !o.feasible || o.costsMoreThanStaying ? 'opacity-70' : ''
                 }`}
               >
                 <td className="py-3 pr-4">
@@ -223,25 +223,45 @@ function OutcomeTable({
                       ถูกที่สุด
                     </span>
                   )}
+                  {!o.feasible && (
+                    <span className="ml-2 rounded-sm bg-[var(--color-warn)]/12 px-1.5 py-0.5 text-[var(--text-micro)] text-[var(--color-warn)]">
+                      จ่ายไม่ไหว
+                    </span>
+                  )}
                 </td>
                 <Td>{baht(o.installmentSatang, 0)}</Td>
-                <Td>{bahtRounded(o.futureInterestFixed)}</Td>
-                <Td>{o.kind === 'stay' ? '—' : baht(o.movingCostSatang, 0)}</Td>
-                <Td
-                  tone={
-                    o.kind === 'stay' ? undefined : o.interestSavedVsStayFixed < 0n ? 'warn' : 'ok'
-                  }
-                >
-                  {o.kind === 'stay' ? '—' : bahtRounded(o.interestSavedVsStayFixed)}
-                </Td>
-                <Td>{formatDuration(o.remainingPeriods)}</Td>
-                <Td tone={o.kind !== 'stay' && o.breakevenBeyondLockin ? 'warn' : undefined}>
-                  {o.kind === 'stay'
-                    ? '—'
-                    : o.breakevenMonth === null
-                      ? 'ไม่คืนทุน'
-                      : `เดือนที่ ${o.breakevenMonth}`}
-                </Td>
+
+                {/* ⛔ ตัวเลขของเคสที่จ่ายไม่ไหวไม่มีความหมาย — ตอนชนเพดานงวดจะได้ดอกหลักสิบล้าน
+                    แสดงสาเหตุแทน ไม่ใช่โชว์เลขใหญ่ ๆ ให้เทียบกับของจริง */}
+                {o.feasible ? (
+                  <>
+                    <Td>{bahtRounded(o.futureInterestFixed)}</Td>
+                    <Td>{o.kind === 'stay' ? '—' : baht(o.movingCostSatang, 0)}</Td>
+                    <Td
+                      tone={
+                        o.kind === 'stay'
+                          ? undefined
+                          : o.interestSavedVsStayFixed < 0n
+                            ? 'warn'
+                            : 'ok'
+                      }
+                    >
+                      {o.kind === 'stay' ? '—' : bahtRounded(o.interestSavedVsStayFixed)}
+                    </Td>
+                    <Td>{formatDuration(o.remainingPeriods)}</Td>
+                    <Td tone={o.kind !== 'stay' && o.breakevenBeyondLockin ? 'warn' : undefined}>
+                      {o.kind === 'stay'
+                        ? '—'
+                        : o.breakevenMonth === null
+                          ? 'ไม่คืนทุน'
+                          : `เดือนที่ ${o.breakevenMonth}`}
+                    </Td>
+                  </>
+                ) : (
+                  <td colSpan={5} className="py-3 pr-4 text-[var(--text-meta)] text-[var(--color-warn)]">
+                    {o.infeasibleReason} · ต้องจ่ายอย่างน้อย {baht(o.minInstallmentSatang, 0)} บาท
+                  </td>
+                )}
               </tr>
             )
           })}

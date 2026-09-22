@@ -181,3 +181,57 @@ describe('ค่าปรับไถ่ถอน (ข้อ 1.6)', () => {
     expect(prepayPenalty(s(2_624_036.54), bps(300), 48, 36)).toBe(0n)
   })
 })
+
+describe('TV-34 ค่างวดใหม่ต่ำกว่าดอกเบี้ย ต้องตีตกไม่ใช่โชว์เป็นทางเลือก', () => {
+  // เจอจากการใช้งานจริง: ยอด 3,900,000 ค่างวด 15,000 ที่ 5.50% ดอกเดือนแรกราว 17,800
+  // engine จะวนจนชนเพดาน 1,200 งวด แล้วได้ดอกหลักสิบล้าน ซึ่งไปกินสเกลกราฟทั้งใบ
+  const ctx: RefinanceContext = {
+    balanceSatang: s(3_900_000),
+    asOf: isoDate('2029-10-01'),
+    dueDayOfMonth: 1,
+    referenceRates: [],
+    conventions: defaultConventions('2029-10-01'),
+  }
+
+  const out = compareRefinanceOptions(ctx, [
+    {
+      kind: 'stay', label: 'ไม่ทำอะไร',
+      rateSteps: [fixedStep(5.5, 1, null)],
+      installmentSatang: s(30_000), termMonths: 324,
+      movingCostSatang: 0n as Satang, lockinMonths: 0,
+    },
+    {
+      kind: 'refinance', label: 'ลดค่างวดเหลือ 15,000',
+      rateSteps: [fixedStep(5.5, 1, null)],
+      installmentSatang: s(15_000), termMonths: 360,
+      movingCostSatang: s(47_500), lockinMonths: 36,
+    },
+  ])
+  const [stay, tooLow] = out
+
+  it('"ไม่ทำอะไร" ยังเป็นทางเลือกที่จ่ายไหว', () => {
+    expect(stay!.feasible).toBe(true)
+  })
+
+  it('ค่างวด 15,000 ถูก mark ว่าจ่ายไม่ไหว', () => {
+    expect(tooLow!.feasible).toBe(false)
+    expect(tooLow!.infeasibleReason).toBeTruthy()
+  })
+
+  it('บอกค่างวดขั้นต่ำที่ปิดหนี้ได้ใน 360 งวด', () => {
+    // PMT(3,900,000, 5.50%, 360) ราว 22,140
+    expect(Number(tooLow!.minInstallmentSatang) / 100).toBeGreaterThan(20_000)
+    expect(Number(tooLow!.minInstallmentSatang) / 100).toBeLessThan(25_000)
+  })
+
+  it('⛔ ห้ามเลือกเป็นทางที่ดีที่สุด แม้ดูเหมือนจ่ายน้อยกว่าต่อเดือน', () => {
+    const { best, warnings } = recommend(out)
+    expect(best.feasible).toBe(true)
+    expect(best.label).toBe('ไม่ทำอะไร')
+    expect(warnings.some((w) => w.includes('จ่ายอย่างน้อย'))).toBe(true)
+  })
+
+  it('ไม่ถูกนับเป็น "ยืดเทอมแล้วแพงกว่า" ซ้ำ เพราะคนละปัญหากัน', () => {
+    expect(tooLow!.costsMoreThanStaying).toBe(false)
+  })
+})
