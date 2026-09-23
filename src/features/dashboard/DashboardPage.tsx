@@ -22,6 +22,7 @@ import { Field, SelectField } from '@/components/Field'
 import { baht, bahtRounded, formatDuration, formatThaiDate } from '@/lib/format'
 import { toLoanTerms, toPaymentEvents, type LoanFull, type LoanListItem } from '@/lib/db'
 import { BalanceChart, TaxChart, YearBarsChart } from './charts'
+import { balanceOn, settledPeriods } from '@/lib/progress'
 
 export type LoanBundle = { item: LoanListItem; full: LoanFull }
 
@@ -68,6 +69,7 @@ export function DashboardPage({
         const events = toPaymentEvents(b.full)
         return {
           ...b,
+          events,
           // "ถ้าไม่โปะ" = ตารางที่ไม่ใส่เหตุการณ์จ่ายเลย ใช้เป็นฐานวัดว่าการโปะช่วยได้แค่ไหน
           actual: buildSchedule(terms, events),
           noPrepay: buildSchedule(terms),
@@ -92,7 +94,7 @@ export function DashboardPage({
 
   // รวมทุกหลัง (ข้อ 11 ข้อ 2)
   const totalDebt = computed.reduce(
-    (a, c) => (a + balanceAt(c.actual.rows, today, c.item)) as Fixed,
+    (a, c) => (a + balanceOn(c.actual.rows, c.events, today, c.item.disbursedSatang)) as Fixed,
     ZERO,
   )
   const interestThisYear = computed.reduce(
@@ -105,7 +107,7 @@ export function DashboardPage({
   )
 
   const rows = selected.actual.rows
-  const currentIndex = periodsElapsed(rows, today)
+  const currentIndex = settledPeriods(rows, selected.events, today)
 
   /**
    * โปะจริงหรือยัง — เทียบตารางเต็มสองชุด ไม่ใช่ชุดที่ถูกกรองตามช่วงปีที่เลือก
@@ -137,7 +139,7 @@ export function DashboardPage({
   const shift = (delta: number) => setWindowStart(clamp(winFrom + delta, firstYear, finalYear))
   const currentRow = currentIndex > 0 ? rows[currentIndex - 1] : undefined
   const nextRow = rows[currentIndex]
-  const balance = balanceAt(rows, today, selected.item)
+  const balance = balanceOn(rows, selected.events, today, selected.item.disbursedSatang)
   const principalPaid = ((selected.item.disbursedSatang * FIXED_SCALE) - balance) as Fixed
   const interestPaid = rows
     .slice(0, currentIndex)
@@ -233,7 +235,15 @@ export function DashboardPage({
         <Line
           k="ปิดหนี้"
           v={payoff ? formatThaiDate(payoff.date, 'monthYear') : '—'}
-          sub={savedPeriods > 0 ? `เร็วขึ้น ${formatDuration(savedPeriods)}` : 'ตามแผน'}
+          /* ⚠️ แผนฐานที่ชนเพดานจำนวนงวด = จ่ายตามสัญญาแล้วไม่มีวันปิดหนี้
+             เอาผลต่างมาบอกว่า "เร็วขึ้น 73 ปี" คือเทียบกับเพดาน ไม่ใช่กับความจริง */
+          sub={
+            !selected.noPrepay.paidOff
+              ? 'จ่ายตามสัญญาอย่างเดียวไม่มีวันปิดหนี้'
+              : savedPeriods > 0
+                ? `เร็วขึ้น ${formatDuration(savedPeriods)}`
+                : 'ตามแผน'
+          }
         />
       </section>
 
@@ -391,21 +401,4 @@ function Line({
 }
 
 /** จำนวนงวดที่ถึงกำหนดแล้ว ณ วันที่ให้มา */
-function periodsElapsed(rows: readonly ScheduleRow[], date: ISODate): number {
-  let n = 0
-  for (const r of rows) {
-    if (daysBetween(r.date, date) >= 0) n = r.index
-    else break
-  }
-  return n
-}
 
-function balanceAt(
-  rows: readonly ScheduleRow[],
-  date: ISODate,
-  item: LoanListItem,
-): Fixed {
-  const n = periodsElapsed(rows, date)
-  if (n === 0) return (item.disbursedSatang * FIXED_SCALE) as Fixed
-  return rows[n - 1]!.balanceAfterFixed
-}

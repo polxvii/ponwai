@@ -11,7 +11,7 @@ import { buildSchedule } from '@engine/schedule.js'
 import { groupSchedule, type GroupAxis } from '@engine/grouping.js'
 import { addDays, daysBetween, type ISODate } from '@engine/date.js'
 import type { Fixed, Satang } from '@engine/money.js'
-import type { PaymentKind, ScheduleRow } from '@engine/types.js'
+import type { PaymentEvent, PaymentKind, ScheduleRow } from '@engine/types.js'
 import { Field, NumberField, SelectField, TextField, DateField } from '@/components/Field'
 import { SplitBar } from '@/components/SplitBar'
 import { baht, bahtRounded, formatDuration, formatMonthSpan, formatThaiDate, pct } from '@/lib/format'
@@ -22,6 +22,7 @@ import {
 } from '@/lib/db'
 import { isoDate } from '@engine/date.js'
 import { todayISO } from './model'
+import { balanceOn, settledPeriods } from '@/lib/progress'
 
 const FIXED = 1_000_000_000_000n
 
@@ -58,9 +59,10 @@ export function LoanDetail({
     if (!full) return null
     const terms = toLoanTerms(full)
     // ตารางจากการจ่ายจริง เทียบกับตารางที่ควรเป็นถ้าจ่ายตามสัญญาเป๊ะ ๆ
-    const actual = buildSchedule(terms, toPaymentEvents(full))
+    const events = toPaymentEvents(full)
+    const actual = buildSchedule(terms, events)
     const plan = buildSchedule(terms)
-    return { terms, actual, plan }
+    return { terms, events, actual, plan }
   }, [full])
 
   if (error) {
@@ -81,11 +83,11 @@ export function LoanDetail({
     )
   }
 
-  const { actual, plan } = computed
+  const { actual, plan, events } = computed
   const rows = actual.rows
-  const current = lastRowOnOrBefore(rows, today)
-  const paidPeriods = current ? current.index : 0
-  const balanceNow = current?.balanceAfterFixed ?? (item.disbursedSatang * FIXED as Fixed)
+  // นับจาก "จ่ายจริงไปแล้วหรือยัง" ด้วย ไม่ใช่รอวันครบกำหนดอย่างเดียว
+  const paidPeriods = settledPeriods(rows, events, today)
+  const balanceNow = balanceOn(rows, events, today, item.disbursedSatang)
   const interestPaid = rows
     .slice(0, paidPeriods)
     .reduce((a, r) => (a + r.interestPaidFixed) as Fixed, 0n as Fixed)
@@ -144,7 +146,15 @@ export function LoanDetail({
           <PanelRow k="ผ่อนทั้งหมด" v={formatDuration(rows.length)} />
           <PanelRow
             k="เทียบกับจ่ายตามสัญญา"
-            v={savedPeriods > 0 ? `เร็วขึ้น ${formatDuration(savedPeriods)}` : 'ตามแผน'}
+            /* ⚠️ แผนฐานชนเพดานจำนวนงวด = จ่ายตามสัญญาแล้วไม่มีวันปิดหนี้
+               ผลต่างจะกลายเป็น "เร็วขึ้น 73 ปี" ซึ่งเทียบกับเพดาน ไม่ใช่กับความจริง */
+            v={
+              !plan.paidOff
+                ? 'จ่ายตามสัญญาอย่างเดียวไม่มีวันปิดหนี้'
+                : savedPeriods > 0
+                  ? `เร็วขึ้น ${formatDuration(savedPeriods)}`
+                  : 'ตามแผน'
+            }
           />
         </dl>
       </section>
@@ -229,7 +239,7 @@ export function LoanDetail({
           ถ้าตัวเลขไม่ตรงใบแจ้งยอด ให้ดู &quot;ช่วงคิดดอก&quot; กับ &quot;วัน&quot; ก่อน —
           ปัญหาเกือบทั้งหมดมาจากวันที่ ไม่ใช่สูตร
         </p>
-        <ScheduleTable rows={rows} today={today} />
+        <ScheduleTable rows={rows} events={events} today={today} />
       </section>
     </Wrapper>
   )
@@ -451,9 +461,18 @@ const FLAG_LABELS: Record<string, string> = {
   convention_changed: 'เปลี่ยนวิธีคิด',
 }
 
-function ScheduleTable({ rows, today }: { rows: readonly ScheduleRow[]; today: ISODate }) {
+function ScheduleTable({
+  rows,
+  events,
+  today,
+}: {
+  rows: readonly ScheduleRow[]
+  events: readonly PaymentEvent[]
+  today: ISODate
+}) {
   const [showAll, setShowAll] = useState(false)
-  const currentIndex = lastRowOnOrBefore(rows, today)?.index ?? 0
+  // ใช้เกณฑ์เดียวกับการ์ดด้านบน ไม่งั้นแถวที่ไฮไลต์กับยอดคงเหลือชี้คนละงวด
+  const currentIndex = settledPeriods(rows, events, today)
   // ค่าตั้งต้นโชว์รอบ ๆ งวดปัจจุบัน ไม่ใช่ 360 แถวรวดเดียว
   const view = showAll
     ? rows
@@ -576,14 +595,4 @@ function TdRight({ children }: { children: React.ReactNode }) {
 }
 
 /** งวดล่าสุดที่ถึงกำหนดแล้ว — ใช้หายอดคงเหลือ "วันนี้" */
-function lastRowOnOrBefore(
-  rows: readonly ScheduleRow[],
-  date: ISODate,
-): ScheduleRow | undefined {
-  let found: ScheduleRow | undefined
-  for (const r of rows) {
-    if (daysBetween(r.date, date) >= 0) found = r
-    else break
-  }
-  return found
-}
+
