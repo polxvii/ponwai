@@ -14,7 +14,7 @@ import {
 } from '@engine/refinance.js'
 import type { RateStep } from '@engine/types.js'
 import { mergeShape } from '@/lib/persist'
-import { NO_BANK, OTHER_BANK, bankName } from '../compare/model'
+import { NO_BANK, OTHER_BANK, bankName, promoGap } from '../compare/model'
 
 /** ชื่อที่จะโชว์ในตาราง — ผู้ให้กู้ที่ไม่อยู่ในรายการให้พิมพ์เอง */
 export function refiBankName(r: RefiDraft): string {
@@ -243,7 +243,7 @@ function hasRates(promo: (number | '')[], floating: number | ''): boolean {
 
 /** ทาง retention จะถูกนำไปเทียบจริงไหม — UI ใช้บอกผู้ใช้ว่าทำไมยังไม่ขึ้นในตาราง */
 export function retentionUsable(ret: RetentionDraft): boolean {
-  return hasRates(ret.promoRates, ret.floatingRate)
+  return hasRates(ret.promoRates, ret.floatingRate) && promoGap(ret.promoRates) === null
 }
 
 /**
@@ -266,7 +266,13 @@ export function refiMissing(c: CurrentLoan, r: RefiDraft): string[] {
   if (!pos(c.currentRate)) out.push('เรตที่จ่ายอยู่')
   if (!pos(c.remainingMonths)) out.push('งวดที่เหลือตามสัญญา')
   if (!pos(c.dueDayOfMonth)) out.push('วันตัดรอบของเดือน')
-  if (!r.promoRates.some((x) => typeof x === 'number')) {
+  // ⚠️ ยังไม่พ้น lock-in แล้วไม่กรอก % ค่าปรับ = ค่าปรับกลายเป็น 0 เงียบ ๆ
+  //    ซึ่งเป็นต้นทุนก้อนใหญ่ที่สุดของการย้ายก่อนกำหนด ขาดไปแล้วผลพลิกได้เลย
+  if (num(c.lockinLeftMonths) > 0 && !pos(c.penaltyPct)) out.push('ค่าปรับไถ่ถอน')
+
+  const gap = promoGap(r.promoRates)
+  if (gap !== null) out.push(`เรตปีที่ ${gap} ของธนาคารใหม่ (เว้นว่างตรงกลางไม่ได้)`)
+  else if (!r.promoRates.some((x) => typeof x === 'number')) {
     out.push('เรตปีที่ 1–3 ของธนาคารใหม่')
   }
   if (!pos(r.floatingRate)) out.push('หลังพ้นโปร ของธนาคารใหม่')
@@ -280,10 +286,54 @@ export function refiReady(c: CurrentLoan, r: RefiDraft): boolean {
   return refiMissing(c, r).length === 0
 }
 
+/**
+ * ช่องที่ขาดได้ ผลยังขึ้น แต่ต้นทุนการย้ายจะต่ำกว่าความจริง (ข้อ 5A.3 วิธีที่ 4)
+ *
+ * ⚠️ ต่างจาก refiMissing ตรงที่อันนี้ "ไม่บล็อก" แต่ต้องโชว์คู่กับผลลัพธ์เสมอ
+ *    ไม่งั้นผู้ใช้อ่าน "ต้นทุนการย้าย รวมแล้ว X บาท" เป็นตัวเลขที่ครบแล้ว
+ *    ทั้งที่ค่าประเมินกับเบี้ยอัคคีภัยเป็น 0 เพราะยังไม่ได้กรอก
+ */
+export function refiWarnings(
+  c: CurrentLoan,
+  ret: RetentionDraft,
+  r: RefiDraft,
+): { label: string; impact: string }[] {
+  const out: { label: string; impact: string }[] = []
+
+  if (r.appraisalFee === '') {
+    out.push({ label: 'ค่าประเมินใหม่', impact: 'ปกติ 3,000–10,000 บาท' })
+  }
+  if (r.newFirePremium === '') {
+    out.push({ label: 'เบี้ยอัคคีภัยใหม่', impact: 'ราว 2,000–4,000 บาทต่อ 3 ปี' })
+  }
+  if (r.newMrtaPremium === '') {
+    out.push({ label: 'เบี้ย MRTA ใหม่', impact: 'ถ้าธนาคารใหม่บังคับซื้อ ต้นทุนย้ายสูงขึ้นมาก' })
+  }
+  if (num(c.lockinLeftMonths) > 0 && r.clawback === '') {
+    out.push({ label: 'ของแถมที่ต้องคืนแบงก์เดิม', impact: 'ยังไม่พ้น lock-in มักต้องคืน' })
+  }
+  if (ret.enabled && ret.fee === '') {
+    out.push({ label: 'ค่าดำเนินการ retention', impact: 'ปกติหลักพัน บางแห่งฟรี' })
+  }
+
+  return out
+}
+
 // ---------- อ่านของที่เก็บไว้ในเครื่อง ----------
 
-export const reviveCurrent = (today: ISODate) => (raw: unknown) =>
-  mergeShape(raw, emptyCurrent(today))
+/**
+ * ⚠️ วันที่พิจารณาที่ค้างอยู่ในอดีตอันตรายเงียบ ๆ
+ *    useLocalState เขียนค่าตั้งต้นลง storage ตั้งแต่ mount แรกแม้ผู้ใช้ยังไม่พิมพ์อะไร
+ *    เปิดหน้านี้ทิ้งไว้เดือนตุลา กลับมากรอกยอดคงเหลือเดือนมีนา
+ *    asOf ยังเป็นตุลา แล้ว engine จะ amortise ยอดที่เพิ่งกรอกย้อนหลัง 5 เดือน
+ *    ดอกเบี้ยที่เหลือจึงเกินจริง และวันปิดหนี้กับเดือนคืนทุนมาเร็วกว่าความจริง
+ *    วันในอนาคตปล่อยไว้ได้ เพราะเป็นการวางแผนล่วงหน้าที่ผู้ใช้ตั้งใจ
+ */
+export const reviveCurrent = (today: ISODate) => (raw: unknown) => {
+  const merged = mergeShape(raw, emptyCurrent(today))
+  if (merged && merged.asOf < today) merged.asOf = today
+  return merged
+}
 export const reviveRetention = (raw: unknown) => {
   const merged = mergeShape(raw, EMPTY_RETENTION)
   if (merged && !Array.isArray(merged.promoRates)) merged.promoRates = EMPTY_RETENTION.promoRates

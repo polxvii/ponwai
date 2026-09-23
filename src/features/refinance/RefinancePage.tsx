@@ -18,7 +18,8 @@ import { BANK_OPTIONS, OTHER_BANK } from '../compare/model'
 import { InterestCurveChart } from './InterestCurveChart'
 import {
   emptyCurrent, EMPTY_RETENTION, EMPTY_REFI,
-  buildScenarios, contextOf, penaltyOf, refiMissing, refiMovingCost, refiReady, retentionUsable,
+  buildScenarios, contextOf, penaltyOf, refiMissing, refiMovingCost, refiReady,
+  refiWarnings, retentionUsable,
   reviveCurrent, reviveRetention, reviveRefi,
   type CurrentLoan, type RetentionDraft, type RefiDraft,
 } from './model'
@@ -27,6 +28,9 @@ import {
 const TODAY = todayISO()
 const EMPTY_CURRENT = emptyCurrent(TODAY)
 const REVIVE_CURRENT = reviveCurrent(TODAY)
+
+/** ช่องว่างคือ 0 — ใช้ที่เดียวกับ model เพื่อให้ตีความค่าว่างตรงกัน */
+const num = (v: number | '' | undefined): number => (typeof v === 'number' ? v : 0)
 
 export function RefinancePage() {
   const [current, setCurrent, resetCurrent] = useLocalState<CurrentLoan>(
@@ -68,6 +72,7 @@ export function RefinancePage() {
   const penalty = penaltyOf(current)
   const moving = refiMovingCost(current, refi)
   const missing = refiMissing(current, refi)
+  const missingCosts = refiWarnings(current, retention, refi)
 
   return (
     <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
@@ -130,6 +135,20 @@ export function RefinancePage() {
               )}
 
               <OutcomeTable outcomes={outcomes} best={best} />
+
+              {/* ให้ผลลัพธ์ตั้งแต่ยังกรอกไม่ครบ พร้อมบอกว่าที่ขาดกระทบเท่าไหร่ (ข้อ 5A.3) */}
+              {missingCosts.length > 0 && (
+                <aside className="mt-6 rounded-md border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4">
+                  <h3 className="text-meta font-medium">ยังกรอกไม่ครบ — ต้นทุนการย้ายต่ำกว่าจริง</h3>
+                  <ul className="mt-2 space-y-1 text-meta text-[var(--color-ink-2)]">
+                    {missingCosts.map((w) => (
+                      <li key={w.label}>
+                        {w.label} — {w.impact}
+                      </li>
+                    ))}
+                  </ul>
+                </aside>
+              )}
 
               {/* ผู้ใช้กรอก 2 ทาง แล้วเห็น 4 แถว ต้องบอกว่าอีก 2 มาจากไหน ไม่ใช่ปล่อยให้เดา */}
               {outcomes.some((o) => o.autoAdded) && (
@@ -374,10 +393,15 @@ function CurrentLoanForm({
         <Field
           label="ค่าปรับไถ่ถอน"
           suffix="%"
+          /* ⛔ ห้ามสรุปจากยอดที่คำนวณได้ ยอด 0 เกิดจาก "ยังไม่กรอก" ก็ได้
+             การบอกว่า "พ้น lock-in แล้ว" ทั้งที่ผู้ใช้เพิ่งกรอกว่าเหลืออีก 12 เดือน
+             คือยืนยันข้อเท็จจริงที่ผิด บนตัวเลขที่ชี้ขาดว่าย้ายคุ้มหรือไม่ */
           hint={
-            penalty > 0n
-              ? `คิดเป็น ${baht(penalty, 0)} บาท`
-              : 'ไม่ถูกเก็บ เพราะพ้น lock-in แล้ว'
+            num(c.lockinLeftMonths) === 0
+              ? 'ไม่ถูกเก็บ เพราะพ้น lock-in แล้ว'
+              : penalty > 0n
+                ? `คิดเป็น ${baht(penalty, 0)} บาท`
+                : `ยังเหลือ lock-in ${num(c.lockinLeftMonths)} เดือน ต้องกรอก % ไม่งั้นคิดเป็น 0`
           }
         >
           <NumberField value={c.penaltyPct} onChange={(v) => onChange({ penaltyPct: v })} />

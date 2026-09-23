@@ -189,7 +189,9 @@ export function assessCompleteness(
   } else if (!(typeof d.installment === 'number' && d.installment > 0)) {
     blocking.push('ค่างวดที่จะจ่าย')
   }
-  if (!d.promoRates.some((r) => typeof r === 'number')) blocking.push('เรตปีที่ 1–3')
+  const gap = promoGap(d.promoRates)
+  if (gap !== null) blocking.push(`เรตปีที่ ${gap} (เว้นว่างตรงกลางไม่ได้)`)
+  else if (!d.promoRates.some((r) => typeof r === 'number')) blocking.push('เรตปีที่ 1–3')
   if (typeof d.floatingRate !== 'number') blocking.push('หลังพ้นโปร')
 
   return { ready: blocking.length === 0, blocking, missing }
@@ -327,6 +329,24 @@ export function reviveDrafts(raw: unknown): OfferDraft[] | null {
 export function reviveCommon(raw: unknown): CommonTerms | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
   return { ...EMPTY_COMMON, ...(raw as Partial<CommonTerms>) }
+}
+
+/**
+ * ปีที่เว้นว่างทั้งที่มีปีหลังกรอกไว้ — คืนเลขปี (1-based) หรือ null ถ้าไม่มีช่องโหว่
+ *
+ * ⛔ ห้ามปล่อยให้เว้นกลางได้
+ *    rateStepsFromYearlyRates ให้ช่วงเวลาตาม "ลำดับใน array" ล้วน ๆ
+ *    และ toLoanOffer filter ค่าว่างทิ้งก่อนส่งให้ ปีหลังจึงเลื่อนขึ้นมาแทนที่
+ *    กรอกปี 1 กับปี 3 แล้วเว้นปี 2 จะได้ปี 2 = เรตของปี 3 และหมดโปรที่เดือน 25 แทน 37
+ */
+export function promoGap(rates: readonly (number | '')[]): number | null {
+  let last = -1
+  rates.forEach((r, i) => {
+    if (typeof r === 'number') last = i
+  })
+  if (last < 0) return null
+  for (let i = 0; i < last; i++) if (typeof rates[i] !== 'number') return i + 1
+  return null
 }
 
 /** จำนวนปีที่มีเรตโปร — ใช้บอกว่าเรตลอยตัวกินเวลาเท่าไหร่ของสัญญา */
