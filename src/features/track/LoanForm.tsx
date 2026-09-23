@@ -10,7 +10,7 @@ import { useState } from 'react'
 import { Field, NumberField, SelectField, TextField, Toggle, DateField } from '@/components/Field'
 import { formatThaiDate } from '@/lib/format'
 import { isoDate } from '@engine/date.js'
-import { createLoan } from '@/lib/db'
+import { createLoan, updateLoan } from '@/lib/db'
 import { BANK_OPTIONS, OTHER_BANK } from '../compare/model'
 import {
   DATE_ROLL_OPTIONS, DAY_COUNT_OPTIONS, ROLL_CALENDAR_OPTIONS, ROUNDING_OPTIONS,
@@ -21,16 +21,24 @@ import {
 export function LoanForm({
   onDone,
   onCancel,
+  edit,
 }: {
   onDone: (loanId: string) => void
   onCancel: () => void
+  /**
+   * โหมดแก้ไข — ส่งสัญญาเดิมมาเติมฟอร์ม
+   * conventionConfirmed = ยืนยันวิธีคิดดอกด้วยใบแจ้งยอดแล้ว ห้ามให้แก้ทับ
+   */
+  edit?: { loanId: string; draft: LoanDraft; conventionConfirmed: boolean }
 }) {
-  const [d, setD] = useState<LoanDraft>(() => emptyLoanDraft(todayISO()))
+  const [d, setD] = useState<LoanDraft>(() => edit?.draft ?? emptyLoanDraft(todayISO()))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
 
   const set = (patch: Partial<LoanDraft>) => setD({ ...d, ...patch })
+  /** วิธีคิดดอกที่ยืนยันจากใบแจ้งยอดแล้ว ห้ามแก้ทับจากฟอร์มนี้ */
+  const convLocked = edit?.conventionConfirmed === true
   const errors = validateDraft(d)
 
   const setRate = (i: number, v: number | '') => {
@@ -44,7 +52,12 @@ export function LoanForm({
     setBusy(true)
     setError(null)
     try {
-      onDone(await createLoan(toNewLoanInput(d)))
+      if (edit) {
+        await updateLoan(edit.loanId, toNewLoanInput(d))
+        onDone(edit.loanId)
+      } else {
+        onDone(await createLoan(toNewLoanInput(d)))
+      }
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -54,9 +67,11 @@ export function LoanForm({
 
   return (
     <div className="max-w-[640px]">
-      <h2 className="text-lead">บันทึกสัญญาที่ผ่อนอยู่</h2>
+      <h2 className="text-lead">{edit ? 'แก้ไขสัญญา' : 'บันทึกสัญญาที่ผ่อนอยู่'}</h2>
       <p className="mt-1 text-meta text-[var(--color-ink-2)]">
-        เอาเลขจากสัญญาเงินกู้กับใบแจ้งยอดล่าสุดมากรอก ส่วนที่ไม่รู้ข้ามได้ แก้ทีหลังได้
+        {edit
+          ? 'แก้แล้วตารางผ่อนจะคำนวณใหม่ทั้งหมด — ยอดที่บันทึกว่าจ่ายจริงยังอยู่ครบทุกงวด'
+          : 'เอาเลขจากสัญญาเงินกู้กับใบแจ้งยอดล่าสุดมากรอก ส่วนที่ไม่รู้ข้ามได้ แก้ทีหลังได้'}
       </p>
 
       <section className="mt-6 space-y-3">
@@ -173,9 +188,12 @@ export function LoanForm({
           </span>
         </summary>
 
+        {/* ⛔ ยืนยันด้วยใบแจ้งยอดแล้วห้ามให้แก้ทับ
+            ค่าที่พิสูจน์กับยอดจริงแล้วมีน้ำหนักกว่าค่าที่กรอกในฟอร์มเสมอ */}
         <p className="mt-3 rounded-md bg-[var(--color-interest-tint)] px-3 py-2 text-meta text-[var(--color-ink-2)]">
-          ทั้ง 3 ข้อนี้ไม่มีเขียนในสัญญา รู้ได้จากการเทียบกับใบแจ้งยอดจริงเท่านั้น
-          ระบบจะบันทึกไว้ว่าเป็นค่าสมมติ จนกว่าคุณจะยืนยันด้วยยอดจริง
+          {edit?.conventionConfirmed === true
+            ? 'ยืนยันด้วยใบแจ้งยอดจริงไปแล้ว จึงแก้ตรงนี้ไม่ได้ — ถ้าจะเปลี่ยน ให้ไปที่หน้ากระทบยอดแล้วเทียบใหม่'
+            : 'ทั้ง 3 ข้อนี้ไม่มีเขียนในสัญญา รู้ได้จากการเทียบกับใบแจ้งยอดจริงเท่านั้น ระบบจะบันทึกไว้ว่าเป็นค่าสมมติ จนกว่าคุณจะยืนยันด้วยยอดจริง'}
         </p>
 
         <div className="mt-3 space-y-3">
@@ -184,6 +202,7 @@ export function LoanForm({
               value={d.dayCountBasis}
               onChange={(v) => set({ dayCountBasis: v })}
               options={DAY_COUNT_OPTIONS}
+              disabled={convLocked}
             />
           </Field>
           <Field label="การปัดเศษ" hint="ปัดตอนจบงวด ไม่ใช่ปัดทุกวัน">
@@ -191,6 +210,7 @@ export function LoanForm({
               value={d.rounding}
               onChange={(v) => set({ rounding: v })}
               options={ROUNDING_OPTIONS}
+              disabled={convLocked}
             />
           </Field>
           <Field label="ถ้าวันตัดตรงวันหยุด">
@@ -211,7 +231,9 @@ export function LoanForm({
           )}
           <Toggle
             checked={d.capitaliseUnpaidInterest}
-            onChange={(v) => set({ capitaliseUnpaidInterest: v })}
+            onChange={(v) => {
+              if (!convLocked) set({ capitaliseUnpaidInterest: v })
+            }}
             label="จ่ายไม่พอดอก แล้วเอาดอกที่เหลือทบเข้าเงินต้น"
             hint="ค่าตั้งต้นคือไม่ทบ ตาม ป.พ.พ. ม.655 ที่ห้ามคิดดอกซ้อนดอก — เปิดเฉพาะเมื่อยืนยันจากใบแจ้งยอดแล้ว"
           />
@@ -238,7 +260,7 @@ export function LoanForm({
           disabled={busy}
           className="tap rounded-md bg-[var(--color-interest)] px-4 py-2.5 text-[var(--color-panel-ink)] disabled:opacity-50"
         >
-          {busy ? 'กำลังบันทึก…' : 'บันทึกสัญญา'}
+          {busy ? 'กำลังบันทึก…' : edit ? 'บันทึกการแก้ไข' : 'บันทึกสัญญา'}
         </button>
         <button onClick={onCancel} disabled={busy} className="tap px-4 py-2.5 text-[var(--color-ink-2)]">
           ยกเลิก

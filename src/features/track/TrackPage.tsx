@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { baht, formatDuration, formatThaiDate } from '@/lib/format'
-import { deleteLoan, getAllLoansFull, type LoanListItem } from '@/lib/db'
+import { deleteLoan, getAllLoansFull, type LoanFull, type LoanListItem } from '@/lib/db'
 import { DashboardPage, type LoanBundle } from '../dashboard/DashboardPage'
 import { PrepayPage } from '../prepay/PrepayPage'
 import { ReconcilePage } from '../reconcile/ReconcilePage'
@@ -16,7 +16,7 @@ import { buildSchedule } from '@engine/schedule.js'
 import { toLoanTerms, toPaymentEvents } from '@/lib/db'
 import { LoanForm } from './LoanForm'
 import { LoanDetail } from './LoanDetail'
-import { todayISO } from './model'
+import { todayISO, toLoanDraft } from './model'
 
 /**
  * Dashboard เป็นหน้าแรกเมื่อมีสัญญาแล้ว ไม่ใช่รายการสัญญา
@@ -29,6 +29,7 @@ type View =
   | { kind: 'detail'; item: LoanListItem }
   | { kind: 'prepay'; item: LoanListItem }
   | { kind: 'reconcile'; item: LoanListItem }
+  | { kind: 'edit'; item: LoanListItem; full: LoanFull }
 
 export function TrackPage({ onSignIn }: { onSignIn: () => void }) {
   const { user, loading } = useAuth()
@@ -89,7 +90,29 @@ function TrackShell() {
         }}
         onPlanPrepay={() => setView({ kind: 'prepay', item: view.item })}
         onReconcile={() => setView({ kind: 'reconcile', item: view.item })}
+        onEdit={(full) => setView({ kind: 'edit', item: view.item, full })}
       />
+    )
+  }
+
+  if (view.kind === 'edit') {
+    return (
+      <Shell>
+        <LoanForm
+          edit={{
+            loanId: view.item.loanId,
+            draft: toLoanDraft(view.full),
+            conventionConfirmed: !view.full.conventionAssumed,
+          }}
+          onCancel={() => setView({ kind: 'detail', item: view.item })}
+          onDone={() => {
+            // กลับไปหน้ารายการ ไม่ใช่หน้ารายละเอียด
+            // เพราะ item ที่ถืออยู่เป็นของเก่า ยอด/ชื่อที่เพิ่งแก้จะยังไม่อัปเดต
+            setView({ kind: 'list' })
+            reload()
+          }}
+        />
+      </Shell>
     )
   }
 

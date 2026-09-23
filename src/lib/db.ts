@@ -234,6 +234,121 @@ export async function createLoan(input: NewLoanInput): Promise<string> {
 }
 
 /**
+ * แก้ไขสัญญาที่มีอยู่
+ *
+ * ⛔ ห้ามใช้วิธีลบแล้วสร้างใหม่
+ *    payments ผูกกับ loan_id และ on delete cascade จะลบยอดที่จ่ายจริงไปด้วยทั้งหมด
+ *    ซึ่งเป็นข้อมูลชิ้นเดียวที่ผู้ใช้กรอกเองทีละงวดและหาคืนไม่ได้
+ *    จึงต้องแก้ทับของเดิมทุกตาราง ไม่ใช่สร้างแถวใหม่
+ *
+ * ⚠️ ขั้นอัตราต้องลบทิ้งทั้งชุดก่อนใส่ใหม่ ไม่ใช่ upsert ทีละแถว
+ *    จำนวนปีโปรเปลี่ยนได้ ถ้าเหลือแถวเก่าค้าง ช่วงเดือนจะซ้อนกันแล้วอัตราเพี้ยน
+ */
+export async function updateLoan(loanId: string, input: NewLoanInput): Promise<void> {
+  const loan = must(
+    await supabase
+      .from('active_loans')
+      .select('property_id, offer_id')
+      .eq('id', loanId)
+      .single(),
+  ) as { property_id: string; offer_id: string | null }
+
+  must(
+    await supabase
+      .from('properties')
+      .update({ name: input.propertyName })
+      .eq('id', loan.property_id)
+      .select('id'),
+  )
+
+  const offerFields = {
+    bank_code: input.bankCode,
+    bank_name: input.bankName,
+    loan_amount_satang: Number(input.disbursedSatang),
+    term_months: input.termMonths,
+    installment_quoted_satang: Number(input.installmentSatang),
+  }
+  if (loan.offer_id === null) {
+    // สัญญาเก่าที่ไม่มีข้อเสนอผูกอยู่ — สร้างให้แล้วชี้กลับมา
+    const offer = must(
+      await supabase
+        .from('loan_offers')
+        .insert({ property_id: loan.property_id, ...offerFields })
+        .select('id')
+        .single(),
+    ) as { id: string }
+    must(
+      await supabase.from('active_loans').update({ offer_id: offer.id }).eq('id', loanId).select('id'),
+    )
+  } else {
+    must(await supabase.from('loan_offers').update(offerFields).eq('id', loan.offer_id).select('id'))
+  }
+
+  must(
+    await supabase
+      .from('active_loans')
+      .update({
+        contract_date: input.contractDate,
+        first_accrual_date: input.firstAccrualDate,
+        first_due_date: input.firstDueDate,
+        due_day_of_month: input.dueDayOfMonth,
+        date_roll: input.dateRoll,
+        roll_calendar: input.rollCalendar,
+        term_months: input.termMonths,
+        disbursed_amount_satang: Number(input.disbursedSatang),
+        installment_satang: Number(input.installmentSatang),
+        prepay_mode: input.prepayMode,
+      })
+      .eq('id', loanId)
+      .select('id'),
+  )
+
+  await supabase.from('loan_rate_steps').delete().eq('loan_id', loanId)
+  const steps = input.promoRatesBps.map((rate, i) => ({
+    loan_id: loanId,
+    from_month: i * 12 + 1,
+    to_month: (i + 1) * 12,
+    kind: 'fixed',
+    fixed_rate_bps: rate,
+  }))
+  steps.push({
+    loan_id: loanId,
+    from_month: input.promoRatesBps.length * 12 + 1,
+    to_month: null as unknown as number,
+    kind: 'fixed',
+    fixed_rate_bps: input.floatingRateBps,
+  })
+  must(await supabase.from('loan_rate_steps').insert(steps).select('id'))
+
+  // ⛔ ห้ามทับ convention ที่ยืนยันจากใบแจ้งยอดแล้ว
+  //    ค่าที่พิสูจน์กับยอดจริงแล้วมีค่ากว่าค่าที่ผู้ใช้เดาในฟอร์มเสมอ
+  //    ฟอร์มจึงล็อกส่วนนี้ไว้เมื่อยืนยันแล้ว และตรงนี้กันอีกชั้น
+  const assumed = must(
+    await supabase
+      .from('loan_conventions')
+      .select('id, confidence')
+      .eq('loan_id', loanId)
+      .order('effective_from')
+      .limit(1),
+  ) as { id: string; confidence: string }[]
+  const first = assumed[0]
+  if (first && first.confidence === 'assumed') {
+    must(
+      await supabase
+        .from('loan_conventions')
+        .update({
+          effective_from: input.firstAccrualDate,
+          day_count_basis: input.dayCountBasis,
+          interest_rounding: input.rounding,
+          capitalise_unpaid_interest: input.capitaliseUnpaidInterest,
+        })
+        .eq('id', first.id)
+        .select('id'),
+    )
+  }
+}
+
+/**
  * ลบสัญญา แล้วเก็บทรัพย์สินที่ไม่มีสัญญาเหลืออยู่ทิ้งด้วย
  *
  * ⚠️ ลบแค่ active_loans จะเหลือ properties กับ loan_offers ลอยอยู่เป็นขยะ
@@ -269,6 +384,10 @@ export async function deleteLoan(loanId: string): Promise<void> {
 
 export type LoanFull = {
   loan: LoanRow
+  /** ชื่อทรัพย์สินกับธนาคาร — ต้องมีเพื่อเติมฟอร์มตอนแก้ไขสัญญา */
+  propertyName: string
+  bankCode: string | null
+  bankName: string
   rateSteps: RateStep[]
   conventions: LoanConvention[]
   /** true = ยังไม่มีใบแจ้งยอดมายืนยันวิธีคิดดอก UI ต้องเตือน ไม่ใช่เงียบ (ข้อ 9.1) */
@@ -288,8 +407,12 @@ export type StoredPayment = {
 
 export async function getLoanFull(loanId: string): Promise<LoanFull> {
   const loan = must(
-    await supabase.from('active_loans').select('*').eq('id', loanId).single(),
-  ) as LoanRow
+    await supabase
+      .from('active_loans')
+      .select('*, properties(name), loan_offers(bank_code, bank_name)')
+      .eq('id', loanId)
+      .single(),
+  ) as LoanRow & { properties: NestedProperty; loan_offers: NestedOffer }
 
   const [stepRows, convRows, overrideRows, paymentRows] = await Promise.all([
     supabase.from('loan_rate_steps').select('*').eq('loan_id', loanId).order('from_month'),
@@ -369,6 +492,9 @@ export async function getLoanFull(loanId: string): Promise<LoanFull> {
 
   return {
     loan,
+    propertyName: loan.properties?.name ?? '',
+    bankCode: loan.loan_offers?.bank_code ?? null,
+    bankName: loan.loan_offers?.bank_name ?? '',
     rateSteps,
     conventions,
     conventionAssumed: convData.some((c) => c.confidence === 'assumed'),

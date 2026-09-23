@@ -98,10 +98,12 @@ export function SelectField<T extends string>({
   onChange,
   options,
   placeholder,
+  disabled,
 }: {
   value: T
   onChange: (v: T) => void
   options: readonly { value: T; label: string }[]
+  disabled?: boolean
   /**
    * ตัวเลือกว่างบนสุดสำหรับฟอร์มที่ยังไม่ควรเลือกอะไรให้ล่วงหน้า
    * ⛔ ห้ามยัดตัวเลือกว่างเข้าไปใน options ที่หลายหน้าใช้ร่วมกัน
@@ -111,8 +113,9 @@ export function SelectField<T extends string>({
 }) {
   return (
     <select
-      className={inputClass.replace('text-right', 'text-left')}
+      className={`${inputClass.replace('text-right', 'text-left')} disabled:opacity-60`}
       value={value}
+      disabled={disabled === true}
       onChange={(e) => onChange(e.target.value as T)}
     >
       {placeholder !== undefined && <option value="">{placeholder}</option>}

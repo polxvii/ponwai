@@ -11,8 +11,9 @@ import { isoDate, type ISODate } from '@engine/date.js'
 import type { DateRoll, RollCalendar } from '@engine/types.js'
 import type { DayCountBasis } from '@engine/accrual.js'
 import type { RoundingMode } from '@engine/money.js'
-import type { NewLoanInput } from '@/lib/db'
-import { OTHER_BANK, bankName } from '../compare/model'
+import type { LoanFull, NewLoanInput } from '@/lib/db'
+import type { RateStep } from '@engine/types.js'
+import { BANK_PRESETS, OTHER_BANK, bankName } from '../compare/model'
 
 export type LoanDraft = {
   propertyName: string
@@ -118,6 +119,48 @@ export function toNewLoanInput(d: LoanDraft): NewLoanInput {
     dayCountBasis: d.dayCountBasis,
     rounding: d.rounding,
     capitaliseUnpaidInterest: d.capitaliseUnpaidInterest,
+  }
+}
+
+/**
+ * เติมฟอร์มจากสัญญาที่บันทึกไว้แล้ว — ทางกลับของ toNewLoanInput
+ *
+ * ⚠️ ขั้นอัตราเก็บเป็นช่วงเดือน (from_month/to_month) แต่ฟอร์มกรอกเป็น "ปีที่ 1/2/3"
+ *    ต้องแปลงกลับโดยยึดว่าขั้นสุดท้ายที่ toMonth เป็น null คืออัตราลอยตัว
+ *    ที่เหลือคือโปรรายปีเรียงตามลำดับ ซึ่งตรงกับที่ toNewLoanInput เขียนลงไป
+ */
+export function toLoanDraft(full: LoanFull): LoanDraft {
+  const l = full.loan
+  const known = BANK_PRESETS.some((b) => b.code === full.bankCode)
+  const fixedBps = (st: RateStep): number =>
+    st.kind === 'fixed' ? Number(st.fixedRateBps) / 100 : 0
+
+  const floatingStep = full.rateSteps.find((st) => st.toMonth === null)
+  const promo = full.rateSteps.filter((st) => st.toMonth !== null).map(fixedBps)
+  // ฟอร์มมีช่องเรตโปร 3 ช่องเสมอ เติมช่องว่างให้ครบเพื่อไม่ให้ช่องหาย
+  const promoRates: (number | '')[] = [0, 1, 2].map((i) => promo[i] ?? '')
+
+  const conv = full.conventions[0]
+
+  return {
+    propertyName: full.propertyName,
+    bankCode: known && full.bankCode !== null ? full.bankCode : OTHER_BANK,
+    customName: known ? '' : full.bankName,
+    contractDate: isoDate(l.contract_date),
+    firstAccrualDate: isoDate(l.first_accrual_date),
+    firstDueDate: isoDate(l.first_due_date),
+    dueDayOfMonth: l.due_day_of_month,
+    dateRoll: l.date_roll,
+    rollCalendar: l.roll_calendar,
+    termYears: Math.round(l.term_months / 12),
+    disbursed: l.disbursed_amount_satang / 100,
+    installment: l.installment_satang / 100,
+    prepayMode: l.prepay_mode,
+    promoRates,
+    floatingRate: floatingStep ? fixedBps(floatingStep) : '',
+    dayCountBasis: conv?.dayCountBasis ?? 'ACT/365F',
+    rounding: conv?.rounding ?? 'round_satang',
+    capitaliseUnpaidInterest: conv?.capitaliseUnpaidInterest ?? false,
   }
 }
 

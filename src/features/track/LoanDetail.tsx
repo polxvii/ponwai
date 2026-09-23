@@ -31,11 +31,14 @@ export function LoanDetail({
   onBack,
   onPlanPrepay,
   onReconcile,
+  onEdit,
 }: {
   item: LoanListItem
   onBack: () => void
   onPlanPrepay: () => void
   onReconcile: () => void
+  /** ส่งสัญญาที่โหลดมาแล้วกลับไป จะได้ไม่ต้องยิงซ้ำเพื่อเติมฟอร์ม */
+  onEdit: (full: LoanFull) => void
 }) {
   const [full, setFull] = useState<LoanFull | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -171,6 +174,12 @@ export function LoanDetail({
           className="tap rounded-md border border-[var(--color-rule)] px-4 py-2.5"
         >
           กระทบยอดกับใบแจ้งยอด →
+        </button>
+        <button
+          onClick={() => onEdit(full)}
+          className="tap rounded-md border border-[var(--color-rule)] px-4 py-2.5"
+        >
+          แก้ไขสัญญา
         </button>
         <button
           onClick={() =>
