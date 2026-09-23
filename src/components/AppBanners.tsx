@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react'
 import {
   applyUpdate, canInstall, captureInstallPrompt, isIosSafari, isStandalone, promptInstall,
-  registerServiceWorker,
+  registerServiceWorker, wasInstalled,
 } from '@/lib/pwa'
 import { PREFIX } from '@/lib/persist'
 
@@ -30,7 +30,9 @@ export function AppBanners() {
 
   useEffect(() => {
     registerServiceWorker(() => setUpdateReady(true))
-    const unsubscribe = captureInstallPrompt(() => setInstallable(true))
+    // อ่านสถานะจริงทุกครั้งที่เปลี่ยน ไม่ใช่ตั้งเป็น true อย่างเดียว
+    // ไม่งั้นติดตั้งจากเมนูเบราว์เซอร์แล้วแบนเนอร์ค้าง
+    const unsubscribe = captureInstallPrompt(() => setInstallable(canInstall()))
 
     const on = () => setOffline(false)
     const off = () => setOffline(true)
@@ -52,15 +54,18 @@ export function AppBanners() {
     }
   }
 
-  // ติดตั้งไปแล้วไม่ต้องชวนอีก
+  // ติดตั้งไปแล้วไม่ต้องชวนอีก — wasInstalled ครอบเคสที่ติดตั้งจากเมนูเบราว์เซอร์
+  // ซึ่งแท็บเดิมยังไม่ใช่ standalone จึงเช็คจาก isStandalone() อย่างเดียวไม่พอ
   const showInstall =
-    !dismissed && !isStandalone() && (installable || canInstall() || isIosSafari())
+    !dismissed && !isStandalone() && !wasInstalled() && (installable || isIosSafari())
 
   if (!offline && !updateReady && !showInstall) return null
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-40 flex flex-col gap-2 p-3"
+      /* pointer-events-none จำเป็น: กล่องกว้างเต็มจอแต่แบนเนอร์กว้างแค่ 560px
+         ที่ว่างสองข้างจะกินคลิกของหน้าเว็บทั้งแถบล่างจอถ้าไม่ปิด */
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex flex-col gap-2 p-3"
       style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
     >
       {offline && (
@@ -94,10 +99,15 @@ export function AppBanners() {
             <button
               onClick={() => {
                 if (isIosSafari() && !canInstall()) return setShowIosHint(true)
-                void promptInstall().then((r) => {
-                  if (r !== 'dismissed') dismiss()
-                  setInstallable(false)
-                })
+                // ⛔ เขียนธง "ไม่ต้องชวนอีก" เฉพาะตอนติดตั้งสำเร็จจริงเท่านั้น
+                //    'unavailable' แปลว่าไม่มี prompt ให้แสดงด้วยซ้ำ ผู้ใช้ไม่เคยเห็นอะไรเลย
+                //    ถ้านับเป็นสำเร็จ จะปิดคำชวนถาวรทั้งที่ยังไม่ได้ติดตั้ง
+                void promptInstall()
+                  .then((r) => {
+                    if (r === 'accepted') dismiss()
+                    setInstallable(canInstall())
+                  })
+                  .catch(() => setInstallable(canInstall()))
               }}
               className="tap shrink-0 font-medium underline"
             >
@@ -125,7 +135,7 @@ function Banner({ tone, children }: { tone: 'warn' | 'info'; children: React.Rea
   return (
     <div
       role="status"
-      className={`mx-auto flex w-full max-w-[560px] items-center gap-3 rounded-lg px-4 py-3 text-meta shadow-lg ${style}`}
+      className={`pointer-events-auto mx-auto flex w-full max-w-[560px] items-center gap-3 rounded-lg px-4 py-3 text-meta shadow-lg ${style}`}
     >
       {children}
     </div>

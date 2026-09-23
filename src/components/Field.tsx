@@ -97,10 +97,17 @@ export function SelectField<T extends string>({
   value,
   onChange,
   options,
+  placeholder,
 }: {
   value: T
   onChange: (v: T) => void
   options: readonly { value: T; label: string }[]
+  /**
+   * ตัวเลือกว่างบนสุดสำหรับฟอร์มที่ยังไม่ควรเลือกอะไรให้ล่วงหน้า
+   * ⛔ ห้ามยัดตัวเลือกว่างเข้าไปใน options ที่หลายหน้าใช้ร่วมกัน
+   *    หน้าที่ "ต้องเลือก" จะได้ตัวเลือกที่ไม่ใช่ค่าจริงติดมาด้วยโดยไม่มีใครสังเกต
+   */
+  placeholder?: string
 }) {
   return (
     <select
@@ -108,6 +115,7 @@ export function SelectField<T extends string>({
       value={value}
       onChange={(e) => onChange(e.target.value as T)}
     >
+      {placeholder !== undefined && <option value="">{placeholder}</option>}
       {options.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}

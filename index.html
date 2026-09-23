@@ -17,9 +17,14 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- crossorigin จำเป็น: ถ้าไม่ใส่ คำขอเป็น no-cors แล้ว response เป็น opaque
+         (status 0, ok false) ซึ่ง service worker เก็บลง cache ไม่ได้
+         พอออฟไลน์ CSS โหลดไม่ได้ @font-face จึงไม่มี ฟอนต์ไทยตกไปใช้ฟอนต์ระบบ
+         และไฟล์ woff2 ที่ cache ไว้แล้วก็ไม่มีใครอ้างถึง -->
     <link
       href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@400;500&display=swap"
       rel="stylesheet"
+      crossorigin
     />
 </head>
   <body>

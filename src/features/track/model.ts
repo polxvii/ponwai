@@ -77,6 +77,9 @@ export function validateDraft(d: LoanDraft): string[] {
   const errors: string[] = []
   if (d.propertyName.trim() === '') errors.push('ตั้งชื่อทรัพย์สิน เช่น "บ้านรังสิต"')
   if (d.bankCode === OTHER_BANK && d.customName.trim() === '') errors.push('กรอกชื่อธนาคาร')
+  // ⚠️ bank_code เป็น FK ไปตาราง banks ค่าว่างจะพังที่ระดับ DB เป็นภาษาอังกฤษดิบ
+  //    ต้องดักตั้งแต่ตรงนี้ ไม่ใช่รอให้ Postgres ปฏิเสธ
+  if (d.bankCode === '') errors.push('เลือกธนาคาร')
   if (num(d.disbursed) <= 0) errors.push('กรอกวงเงินที่เบิกจริง')
   if (num(d.installment) <= 0) errors.push('กรอกค่างวดตามสัญญา')
   if (!d.promoRates.some((r) => typeof r === 'number')) errors.push('กรอกอัตราดอกเบี้ยปีที่ 1')

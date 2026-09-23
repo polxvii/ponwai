@@ -484,6 +484,7 @@ function RefiForm({
           value={r.bankCode}
           onChange={(v) => onChange({ bankCode: v })}
           options={BANK_OPTIONS}
+          placeholder="เลือกธนาคาร"
         />
       </Field>
 

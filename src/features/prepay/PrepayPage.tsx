@@ -126,10 +126,19 @@ export function PrepayPage({
   }, [manual])
 
   const applyManual = () => {
+    if (selected.length === 0) return
     if (manualAmount === null || Number.isNaN(manualAmount)) return
     applyToSelection(manualAmount)
     setManual('')
   }
+
+  /**
+   * เลิกเลือกเดือนแล้วต้องล้างเลขที่พิมพ์ค้างด้วย
+   * ไม่งั้นช่องถูก disable ทั้งที่ยังมีเลขอยู่ ผู้ใช้แก้หรือกด Escape ก็ไม่ได้
+   */
+  useEffect(() => {
+    if (selected.length === 0) setManual('')
+  }, [selected.length])
 
   async function save() {
     const name = scenarioName.trim()
@@ -341,7 +350,11 @@ export function PrepayPage({
             />
             <button
               onClick={applyManual}
-              disabled={manualAmount === null || Number.isNaN(manualAmount)}
+              /* ต้องมี selected.length เหมือนชิปอื่น ไม่งั้นกดแล้ว applyToSelection
+                 return เงียบ ๆ แต่ setManual('') ยังทำงาน = เลขที่พิมพ์หายไปเฉย ๆ */
+              disabled={
+                selected.length === 0 || manualAmount === null || Number.isNaN(manualAmount)
+              }
               className="tap rounded-full border border-[var(--color-interest)] px-3 py-1.5 text-meta text-[var(--color-interest)] disabled:opacity-40"
             >
               ใส่

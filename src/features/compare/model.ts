@@ -42,9 +42,15 @@ export const OTHER_BANK = 'OTHER'
 /** ยังไม่ได้เลือก — ต้องมี ไม่งั้นช่อง select จะโชว์ธนาคารแรกเหมือนผู้ใช้เลือกไว้เอง */
 export const NO_BANK = ''
 
-/** ตัวเลือกในช่องเลือกธนาคาร — ขึ้นต้นด้วยช่องว่าง ปิดท้ายด้วย "อื่น ๆ" */
+/**
+ * ตัวเลือกในช่องเลือกธนาคาร — ธนาคารจริงล้วน ปิดท้ายด้วย "อื่น ๆ"
+ *
+ * ⛔ ห้ามใส่ตัวเลือกว่างไว้ในนี้
+ *    ค่าคงที่ตัวนี้ใช้ร่วมกับหน้าสร้างสัญญาในโหมดติดตามด้วย
+ *    ซึ่ง bank_code เป็น FK ไปตาราง banks — ค่าว่างจะทำให้ insert พังที่ระดับ DB
+ *    หน้าไหนอยากให้เว้นว่างได้ ส่ง placeholder ให้ SelectField เอง
+ */
 export const BANK_OPTIONS: readonly { value: string; label: string }[] = [
-  { value: NO_BANK, label: 'เลือกธนาคาร' },
   ...BANK_PRESETS.map((b) => ({ value: b.code, label: b.isSfi ? `${b.nameTh} (รัฐ)` : b.nameTh })),
   { value: OTHER_BANK, label: 'อื่น ๆ — พิมพ์ชื่อเอง' },
 ]
@@ -184,6 +190,9 @@ export function assessCompleteness(
   const blocking: string[] = []
   if (!(typeof common.loanAmount === 'number' && common.loanAmount > 0)) blocking.push('วงเงินกู้')
   if (!(typeof common.termYears === 'number' && common.termYears > 0)) blocking.push('ระยะเวลา')
+  // ไม่เลือกธนาคาร = ทุกแถวชื่อเหมือนกันหมด อ่านไม่ออกว่าใครชนะ
+  // และคำเตือนอันดับพลิกจะกลายเป็น "ยังไม่เลือกธนาคาร แพ้ ยังไม่เลือกธนาคาร"
+  if (d.bankCode === NO_BANK) blocking.push('ธนาคาร')
   if (hasLockedPayment) {
     // ค่างวดที่ล็อกไว้ถูกตรวจที่ระดับหน้า ไม่ใช่รายข้อเสนอ
   } else if (!(typeof d.installment === 'number' && d.installment > 0)) {

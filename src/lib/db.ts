@@ -46,6 +46,8 @@ function translateDbError(e: { message: string; code?: string }): string {
   if (e.code === '42501') return 'ไม่มีสิทธิ์เข้าถึงข้อมูลนี้ — ลองเข้าสู่ระบบใหม่'
   if (e.code === 'PGRST301' || e.message.includes('JWT')) return 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่'
   if (e.code === '23505') return 'ข้อมูลนี้มีอยู่แล้ว'
+  // 23503 = FK พัง เคสที่เจอจริงคือ bank_code ไม่ตรงกับรายการธนาคาร
+  if (e.code === '23503') return 'ข้อมูลอ้างอิงไม่ถูกต้อง — ตรวจว่าเลือกธนาคารแล้วหรือยัง'
   return e.message
 }
 

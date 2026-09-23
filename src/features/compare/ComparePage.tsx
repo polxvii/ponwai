@@ -291,6 +291,7 @@ function OfferForm({
           value={draft.bankCode}
           onChange={(v) => onChange({ bankCode: v })}
           options={BANK_OPTIONS}
+          placeholder="เลือกธนาคาร"
         />
       </Field>
 

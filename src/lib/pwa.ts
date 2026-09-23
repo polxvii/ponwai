@@ -60,7 +60,12 @@ type InstallPrompt = Event & {
 }
 
 let deferred: InstallPrompt | null = null
-const waiting = new Set<() => void>()
+let installed = false
+/** ผู้ติดตามสถานะ "ติดตั้งได้หรือไม่" — เรียกทุกครั้งที่สถานะเปลี่ยน ไม่ใช่แค่ตอนเป็นได้ */
+const watchers = new Set<() => void>()
+const notify = () => {
+  for (const fn of watchers) fn()
+}
 
 /**
  * เบราว์เซอร์ยิง beforeinstallprompt ครั้งเดียวและเร็วมาก ถ้าไม่เก็บไว้จะเรียกใช้ทีหลังไม่ได้
@@ -70,33 +75,50 @@ if (typeof window !== 'undefined') {
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault()
     deferred = e as InstallPrompt
-    for (const fn of waiting) fn()
+    notify()
   })
-  // ติดตั้งแล้ว prompt เดิมใช้ไม่ได้อีก ต้องทิ้ง ไม่งั้นปุ่มค้างอยู่
+  // ⚠️ ต้อง notify ด้วย ไม่ใช่แค่ล้าง deferred
+  //    ผู้ใช้ติดตั้งจากเมนูเบราว์เซอร์แล้ว React ไม่รู้เรื่อง แบนเนอร์จะค้างชวนติดตั้งต่อ
+  //    (isStandalone() ไม่ช่วย เพราะแท็บเดิมยัง display-mode: browser อยู่)
   window.addEventListener('appinstalled', () => {
     deferred = null
+    installed = true
+    notify()
   })
 }
 
-/** คืนฟังก์ชันเลิกติดตาม */
-export function captureInstallPrompt(onAvailable: () => void): () => void {
-  waiting.add(onAvailable)
+/** คืนฟังก์ชันเลิกติดตาม — callback จะถูกเรียกทุกครั้งที่สถานะเปลี่ยน */
+export function captureInstallPrompt(onChange: () => void): () => void {
+  watchers.add(onChange)
   // อีเวนต์อาจมาก่อน component mount แล้ว — บอกทันทีไม่ต้องรอรอบหน้า
-  if (deferred) onAvailable()
-  return () => waiting.delete(onAvailable)
+  if (deferred) onChange()
+  return () => watchers.delete(onChange)
 }
 
 export function canInstall(): boolean {
-  return deferred !== null
+  return deferred !== null && !installed
+}
+
+/** ติดตั้งไปแล้วในเซสชันนี้ — แท็บเดิมยังไม่ใช่ standalone จึงต้องจำไว้เอง */
+export function wasInstalled(): boolean {
+  return installed
 }
 
 export async function promptInstall(): Promise<'accepted' | 'dismissed' | 'unavailable'> {
-  if (!deferred) return 'unavailable'
-  await deferred.prompt()
-  const { outcome } = await deferred.userChoice
-  // ใช้ได้ครั้งเดียว ต้องทิ้งหลังใช้ ไม่งั้นเรียกซ้ำแล้ว error
+  const prompt = deferred
+  if (!prompt) return 'unavailable'
+  // ⚠️ ทิ้งก่อน await ไม่ใช่หลัง
+  //    ถ้าทิ้งหลัง userChoice การกดสองครั้งรัว ๆ จะผ่านการ์ดทั้งคู่
+  //    แล้ว prompt() ถูกเรียกซ้ำบนอีเวนต์เดิม ซึ่ง spec บอกให้ throw
   deferred = null
-  return outcome
+  notify()
+  try {
+    await prompt.prompt()
+    const { outcome } = await prompt.userChoice
+    return outcome
+  } catch {
+    return 'unavailable'
+  }
 }
 
 /** iOS ยังไม่รองรับ beforeinstallprompt ต้องบอกวิธีทำเอง */
