@@ -15,6 +15,7 @@ import type { PaymentKind, ScheduleRow } from '@engine/types.js'
 import { Field, NumberField, SelectField, TextField, DateField } from '@/components/Field'
 import { SplitBar } from '@/components/SplitBar'
 import { baht, bahtRounded, formatDuration, formatMonthSpan, formatThaiDate, pct } from '@/lib/format'
+import { downloadCsv, paymentsCsv, reportName, scheduleCsv, yearSummaryCsv } from '@/lib/export'
 import {
   addPayment, getLoanFull, removePayment, toLoanTerms, toPaymentEvents,
   type LoanFull, type LoanListItem,
@@ -28,10 +29,12 @@ export function LoanDetail({
   item,
   onBack,
   onPlanPrepay,
+  onReconcile,
 }: {
   item: LoanListItem
   onBack: () => void
   onPlanPrepay: () => void
+  onReconcile: () => void
 }) {
   const [full, setFull] = useState<LoanFull | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -146,12 +149,52 @@ export function LoanDetail({
         </dl>
       </section>
 
-      <button
-        onClick={onPlanPrepay}
-        className="tap mt-6 rounded-md bg-[var(--color-principal)] px-4 py-2.5 text-[var(--color-ink)]"
-      >
-        วางแผนโปะ →
-      </button>
+      <div className="mt-6 flex flex-wrap gap-3">
+        <button
+          onClick={onPlanPrepay}
+          className="tap rounded-md bg-[var(--color-principal)] px-4 py-2.5 text-[var(--color-ink)]"
+        >
+          วางแผนโปะ →
+        </button>
+        <button
+          onClick={onReconcile}
+          className="tap rounded-md border border-[var(--color-rule)] px-4 py-2.5"
+        >
+          กระทบยอดกับใบแจ้งยอด →
+        </button>
+        <button
+          onClick={() =>
+            downloadCsv(reportName(item.propertyName, 'schedule', today), scheduleCsv(rows))
+          }
+          className="tap rounded-md border border-[var(--color-rule)] px-4 py-2.5"
+        >
+          ส่งออกตารางผ่อน
+        </button>
+        <button
+          onClick={() =>
+            downloadCsv(
+              reportName(item.propertyName, 'yearly', today),
+              yearSummaryCsv(groupSchedule(rows, axis)),
+            )
+          }
+          className="tap rounded-md border border-[var(--color-rule)] px-4 py-2.5"
+        >
+          ส่งออกสรุปรายปี
+        </button>
+        {full.payments.length > 0 && (
+          <button
+            onClick={() =>
+              downloadCsv(
+                reportName(item.propertyName, 'payments', today),
+                paymentsCsv(full.payments),
+              )
+            }
+            className="tap rounded-md border border-[var(--color-rule)] px-4 py-2.5"
+          >
+            ส่งออกการจ่าย
+          </button>
+        )}
+      </div>
 
       {/* ---------- การจ่าย ---------- */}
       <PaymentSection
@@ -398,6 +441,7 @@ function YearTable({ rows, axis }: { rows: readonly ScheduleRow[]; axis: GroupAx
 }
 
 const FLAG_LABELS: Record<string, string> = {
+  actual_payment: 'ยอดจริง',
   negative_amortization: 'จ่ายไม่พอดอก',
   below_minimum: 'ต่ำกว่าขั้นต่ำ',
   rate_changed: 'เรตเปลี่ยน',
@@ -419,62 +463,82 @@ function ScheduleTable({ rows, today }: { rows: readonly ScheduleRow[]; today: I
     <>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[820px] border-collapse text-[var(--text-meta)]">
+          {/* เรียงคอลัมน์ตามที่คนติดตามสินเชื่อใน Excel คุ้นเคย
+              งวด → เดือน → อัตรา → ต้น → ดอก → ยอดชำระ → คงเหลือ
+              คอลัมน์วันที่/จำนวนวันเป็นของไว้ไล่หาสาเหตุตอนกระทบยอด จึงย้ายไปท้าย */}
           <thead>
             <tr className="border-b border-[var(--color-rule)] text-left">
               <ThRight>งวด</ThRight>
-              <th className="py-2 pr-4 font-medium text-[var(--color-ink-2)]">วันตัด</th>
+              <th className="py-2 pr-4 font-medium text-[var(--color-ink-2)]">เดือน</th>
+              <ThRight>อัตรา</ThRight>
+              <ThRight>ชำระเงินต้น</ThRight>
+              <ThRight>ชำระดอกเบี้ย</ThRight>
+              <ThRight>ยอดชำระ</ThRight>
+              <ThRight>ยอดหนี้คงเหลือ</ThRight>
               <th className="py-2 pr-4 font-medium text-[var(--color-ink-2)]">ช่วงคิดดอก</th>
               <ThRight>วัน</ThRight>
-              <ThRight>อัตรา</ThRight>
-              <ThRight>ยอดจ่าย</ThRight>
-              <ThRight>ดอกเบี้ย</ThRight>
-              <ThRight>เงินต้น</ThRight>
-              <ThRight>คงเหลือ</ThRight>
             </tr>
           </thead>
           <tbody>
-            {view.map((r) => (
-              <tr
-                key={r.index}
-                className={`border-b border-[var(--color-rule)] ${
-                  r.index === currentIndex ? 'bg-[var(--color-principal-tint)]' : ''
-                }`}
-              >
-                <TdRight>{r.index}</TdRight>
-                <td className="py-2 pr-4">
-                  {formatThaiDate(r.date)}
-                  {r.date !== r.nominalDate && (
-                    <span className="ml-1 text-[var(--color-ink-3)]" title={`ตามกฎคือ ${formatThaiDate(r.nominalDate)}`}>
-                      *
+            {view.map((r) => {
+              const isActual = r.flags.includes('actual_payment')
+              const otherFlags = r.flags.filter((f) => f !== 'actual_payment')
+              return (
+                <tr
+                  key={r.index}
+                  className={`border-b border-[var(--color-rule)] ${
+                    r.index === currentIndex ? 'bg-[var(--color-principal-tint)]' : ''
+                  }`}
+                >
+                  <TdRight>{r.index}</TdRight>
+                  <td className="py-2 pr-4 whitespace-nowrap">
+                    {formatThaiDate(r.date, 'monthYear')}
+                    {r.date !== r.nominalDate && (
+                      <span
+                        className="ml-1 text-[var(--color-ink-3)]"
+                        title={`ตัดจริง ${formatThaiDate(r.date)} ตามกฎคือ ${formatThaiDate(r.nominalDate)}`}
+                      >
+                        *
+                      </span>
+                    )}
+                  </td>
+                  <TdRight>{pct(r.effectiveRateBps)}</TdRight>
+                  <TdRight>{bahtRounded(r.principalFixed)}</TdRight>
+                  <TdRight>{bahtRounded(r.interestFixed)}</TdRight>
+                  <TdRight>
+                    <span className={isActual ? 'font-medium' : ''}>
+                      {bahtRounded(r.paymentFixed)}
                     </span>
-                  )}
-                </td>
-                {/* ปลายช่วงเป็นแบบเปิด วันตัดยังไม่ถูกคิดดอก จึงแสดงถึงวันก่อนหน้า */}
-                <td className="py-2 pr-4 text-[var(--color-ink-2)]">
-                  {formatThaiDate(r.accrualFrom)} – {formatThaiDate(addDays(r.date, -1))}
-                </td>
-                <TdRight>{r.accrualDays}</TdRight>
-                <TdRight>{pct(r.effectiveRateBps)}</TdRight>
-                <TdRight>
-                  {bahtRounded(r.paymentFixed)}
-                  {r.prepayFixed > 0n && (
-                    <span className="ml-1 text-[var(--color-principal-text)]">
-                      +{bahtRounded(r.prepayFixed)}
+                    {/* แยกให้ชัดว่าแถวไหนมาจากยอดที่บันทึกจริง แถวไหนเป็นประมาณการ */}
+                    <span
+                      className={`ml-1 text-[var(--text-micro)] ${
+                        isActual ? 'text-[var(--color-ok)]' : 'text-[var(--color-ink-3)]'
+                      }`}
+                      title={
+                        isActual
+                          ? 'ยอดที่บันทึกว่าจ่ายจริง'
+                          : 'ประมาณการจากค่างวดตามสัญญา ยังไม่ได้บันทึกยอดจริง'
+                      }
+                    >
+                      {isActual ? 'จริง' : 'คาด'}
                     </span>
-                  )}
-                </TdRight>
-                <TdRight>{bahtRounded(r.interestFixed)}</TdRight>
-                <TdRight>{bahtRounded(r.principalFixed)}</TdRight>
-                <TdRight>
-                  {bahtRounded(r.balanceAfterFixed)}
-                  {r.flags.length > 0 && (
-                    <span className="ml-2 text-[var(--text-micro)] text-[var(--color-ink-3)]">
-                      {r.flags.map((f) => FLAG_LABELS[f] ?? f).join(' · ')}
-                    </span>
-                  )}
-                </TdRight>
-              </tr>
-            ))}
+                  </TdRight>
+                  <TdRight>
+                    {bahtRounded(r.balanceAfterFixed)}
+                    {otherFlags.length > 0 && (
+                      <span className="ml-2 text-[var(--text-micro)] text-[var(--color-ink-3)]">
+                        {otherFlags.map((f) => FLAG_LABELS[f] ?? f).join(' · ')}
+                      </span>
+                    )}
+                  </TdRight>
+                  {/* ปลายช่วงเป็นแบบเปิด วันตัดยังไม่ถูกคิดดอก จึงแสดงถึงวันก่อนหน้า */}
+                  <td className="py-2 pr-4 whitespace-nowrap text-[var(--color-ink-3)]">
+                    {formatThaiDate(r.accrualFrom)} – {formatThaiDate(addDays(r.date, -1))}
+                  </td>
+                  <TdRight>{r.accrualDays}</TdRight>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

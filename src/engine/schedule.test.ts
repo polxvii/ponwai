@@ -360,3 +360,69 @@ describe('invariant: จำนวนวันต้องต่อกันส�
     expect(sum).toBe(daysBetween(isoDate('2026-10-05'), rows[rows.length - 1]!.date))
   })
 })
+
+describe('TV-35 ยอดที่จ่ายจริงต้องแทนค่างวดตามสัญญาของงวดนั้น', () => {
+  // จุดเริ่มต้นของการติดตามสินเชื่อคือ "จ่ายจริงงวดละเท่าไหร่" ซึ่งไม่เท่าค่างวดตามสัญญาเสมอ
+  const terms = makeTerms({
+    startDate: isoDate('2026-01-01'),
+    principalBaht: 3_000_000,
+    installmentBaht: 20_000,
+    rateSteps: [fixedStep(5.0, 1, null)],
+  })
+
+  it('บันทึกจ่ายจริง 50,000 งวดที่ 1 -> งวดนั้นตัดต้นมากกว่าเดิม', () => {
+    const plain = buildSchedule(terms)
+    const actual = buildSchedule(terms, [
+      { date: isoDate('2026-02-01'), amountSatang: baht(50_000), kind: 'installment' },
+    ])
+
+    expect(f(plain.rows[0]!.paymentFixed)).toBe('20,000.00')
+    expect(f(actual.rows[0]!.paymentFixed)).toBe('50,000.00')
+    // ดอกเบี้ยงวดแรกเท่ากัน เพราะคิดจากเงินต้นก่อนจ่าย
+    expect(f(actual.rows[0]!.interestFixed)).toBe(f(plain.rows[0]!.interestFixed))
+    expect(actual.rows[0]!.balanceAfterFixed).toBeLessThan(plain.rows[0]!.balanceAfterFixed)
+    expect(actual.rows[0]!.flags).toContain('actual_payment')
+  })
+
+  it('งวดที่ไม่ได้บันทึกยังใช้ค่างวดตามสัญญา ประมาณการอนาคตจึงทำงานต่อได้', () => {
+    const r = buildSchedule(terms, [
+      { date: isoDate('2026-02-01'), amountSatang: baht(50_000), kind: 'installment' },
+    ])
+    expect(f(r.rows[1]!.paymentFixed)).toBe('20,000.00')
+    expect(r.rows[1]!.flags).not.toContain('actual_payment')
+  })
+
+  it('จ่ายหลายครั้งในงวดเดียวกันให้บวกรวม ไม่ใช่เอาอันสุดท้าย', () => {
+    const r = buildSchedule(terms, [
+      { date: isoDate('2026-01-15'), amountSatang: baht(20_000), kind: 'installment' },
+      { date: isoDate('2026-01-20'), amountSatang: baht(5_000), kind: 'installment' },
+    ])
+    expect(f(r.rows[0]!.paymentFixed)).toBe('25,000.00')
+  })
+
+  it('จ่ายจริงน้อยกว่าดอกเบี้ย -> ติดธง negative_amortization', () => {
+    const r = buildSchedule(terms, [
+      { date: isoDate('2026-02-01'), amountSatang: baht(100), kind: 'installment' },
+    ])
+    expect(r.rows[0]!.flags).toContain('negative_amortization')
+  })
+
+  it('ปิดบัญชี -> จ่ายหมดทั้งต้นและดอกในงวดนั้น แล้วจบ', () => {
+    const r = buildSchedule(terms, [
+      { date: isoDate('2026-03-01'), amountSatang: baht(1), kind: 'full_redemption' },
+    ])
+    expect(r.rows).toHaveLength(2)
+    expect(f(r.rows[1]!.balanceAfterFixed)).toBe('0.00')
+    expect(r.paidOff).toBe(true)
+  })
+
+  it('โปะยังทำงานร่วมกับยอดจ่ายจริงได้ ไม่ทับกัน', () => {
+    const r = buildSchedule(terms, [
+      { date: isoDate('2026-01-20'), amountSatang: baht(100_000), kind: 'partial_prepay' },
+      { date: isoDate('2026-02-01'), amountSatang: baht(30_000), kind: 'installment' },
+    ])
+    expect(f(r.rows[0]!.prepayFixed)).toBe('100,000.00')
+    // ยอดจ่ายรวม = ค่างวดจริง + โปะ
+    expect(f(r.rows[0]!.paymentFixed)).toBe('130,000.00')
+  })
+})

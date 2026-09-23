@@ -11,6 +11,7 @@ import { baht, formatDuration, formatThaiDate } from '@/lib/format'
 import { deleteLoan, getAllLoansFull, type LoanListItem } from '@/lib/db'
 import { DashboardPage, type LoanBundle } from '../dashboard/DashboardPage'
 import { PrepayPage } from '../prepay/PrepayPage'
+import { ReconcilePage } from '../reconcile/ReconcilePage'
 import { buildSchedule } from '@engine/schedule.js'
 import { toLoanTerms, toPaymentEvents } from '@/lib/db'
 import { LoanForm } from './LoanForm'
@@ -27,6 +28,7 @@ type View =
   | { kind: 'new' }
   | { kind: 'detail'; item: LoanListItem }
   | { kind: 'prepay'; item: LoanListItem }
+  | { kind: 'reconcile'; item: LoanListItem }
 
 export function TrackPage({ onSignIn }: { onSignIn: () => void }) {
   const { user, loading } = useAuth()
@@ -86,6 +88,7 @@ function TrackShell() {
           reload()
         }}
         onPlanPrepay={() => setView({ kind: 'prepay', item: view.item })}
+        onReconcile={() => setView({ kind: 'reconcile', item: view.item })}
       />
     )
   }
@@ -124,6 +127,21 @@ function TrackShell() {
         />
       </>
     )
+  }
+
+  if (view.kind === 'reconcile' && bundles !== null) {
+    const bundle = bundles.find((b) => b.item.loanId === view.item.loanId)
+    if (bundle) {
+      return (
+        <ReconcilePage
+          item={bundle.item}
+          full={bundle.full}
+          today={todayISO()}
+          onBack={() => setView({ kind: 'detail', item: view.item })}
+          onApplied={reload}
+        />
+      )
+    }
   }
 
   if (view.kind === 'new') {

@@ -42,10 +42,22 @@ export function buildSchedule(
     overrides: terms.scheduleOverrides,
   }
 
-  const prepays = [...events]
-    .filter((e) => e.kind === 'partial_prepay')
-    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+  const byDate = (a: PaymentEvent, b: PaymentEvent): number =>
+    a.date < b.date ? -1 : a.date > b.date ? 1 : 0
+
+  const prepays = [...events].filter((e) => e.kind === 'partial_prepay').sort(byDate)
   let prepayCursor = 0
+
+  /**
+   * ยอดที่จ่ายจริงของงวด — แทนค่างวดตามสัญญาเฉพาะงวดที่บันทึกไว้
+   *
+   * ⚠️ จำเป็น ไม่ใช่ของแถม จุดเริ่มต้นของการติดตามสินเชื่อคือ "จ่ายจริงงวดละเท่าไหร่"
+   *    ซึ่งไม่เท่าค่างวดตามสัญญาเสมอไป เช่น งวดแรกที่โปะก้อนใหญ่พร้อมกัน
+   *    หรือเดือนที่จ่ายเกินไปนิดหน่อย
+   * งวดที่ไม่ได้บันทึกยังใช้ค่างวดตามสัญญา เพื่อให้ประมาณการอนาคตทำงานต่อได้
+   */
+  const actuals = [...events].filter((e) => e.kind !== 'partial_prepay').sort(byDate)
+  let actualCursor = 0
 
   const rows: ScheduleRow[] = []
   let balance = toFixed(terms.principalSatang)
@@ -116,9 +128,25 @@ export function buildSchedule(
 
     // ---- ตัดชำระ ----
     const accruedTotal = add(accruedCarried, periodInterest)
-    let payment = toFixed(terms.installmentSatang)
+
+    // ---- ยอดจ่ายจริงของงวดนี้ ถ้ามีบันทึกไว้ ----
+    let recorded: Fixed | null = null
+    let redeemed = false
+    while (actualCursor < actuals.length) {
+      const ev = actuals[actualCursor]!
+      if (ev.date > due) break
+      if (ev.date <= from) { actualCursor++; continue }
+      // หลายรายการในงวดเดียวกันให้บวกรวม เช่น จ่ายค่างวดแล้วโอนเพิ่มทีหลัง
+      recorded = add(recorded ?? ZERO_FIXED, toFixed(ev.amountSatang))
+      if (ev.kind === 'full_redemption') redeemed = true
+      actualCursor++
+    }
+
+    let payment = recorded ?? toFixed(terms.installmentSatang)
+    if (recorded !== null) flags.push('actual_payment')
 
     const payoff = add(balance, accruedTotal)
+    if (redeemed) payment = payoff
     if (payment >= payoff) {
       payment = payoff
       flags.push('final_payment')

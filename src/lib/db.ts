@@ -22,6 +22,7 @@ import type {
 } from '@engine/types.js'
 import type { DayCountBasis } from '@engine/accrual.js'
 import type { PrepayPlan } from '@engine/prepay.js'
+import type { StatementEntry } from '@engine/reconcile.js'
 import type { RoundingMode } from '@engine/money.js'
 
 const sat = (n: number | null | undefined): Satang => BigInt(Math.round(n ?? 0)) as Satang
@@ -576,6 +577,119 @@ export async function loadScenario(scenarioId: string): Promise<PrepayPlan> {
 
 export async function deleteScenario(scenarioId: string): Promise<void> {
   const res = await supabase.from('scenarios').delete().eq('id', scenarioId)
+  if (res.error) throw new Error(translateDbError(res.error))
+}
+
+// ---------- ใบแจ้งยอด ----------
+
+export async function listStatementEntries(loanId: string): Promise<StatementEntry[]> {
+  const rows = must(
+    await supabase
+      .from('statement_entries')
+      .select('stmt_date, interest_satang, principal_satang, balance_satang')
+      .eq('loan_id', loanId)
+      .order('stmt_date'),
+  ) as {
+    stmt_date: string
+    interest_satang: number | null
+    principal_satang: number | null
+    balance_satang: number | null
+  }[]
+
+  return rows.map((r) => ({
+    stmtDate: isoDate(r.stmt_date),
+    ...(r.interest_satang !== null ? { interestSatang: sat(r.interest_satang) } : {}),
+    ...(r.principal_satang !== null ? { principalSatang: sat(r.principal_satang) } : {}),
+    ...(r.balance_satang !== null ? { balanceSatang: sat(r.balance_satang) } : {}),
+  }))
+}
+
+/** upsert ตามวันที่ — กรอกใบเดิมซ้ำต้องทับของเก่า ไม่ใช่เกิดแถวซ้ำ */
+export async function upsertStatementEntries(
+  loanId: string,
+  entries: readonly StatementEntry[],
+): Promise<void> {
+  if (entries.length === 0) return
+  const res = await supabase.from('statement_entries').upsert(
+    entries.map((e) => ({
+      loan_id: loanId,
+      stmt_date: e.stmtDate,
+      interest_satang: e.interestSatang === undefined ? null : Number(e.interestSatang),
+      principal_satang: e.principalSatang === undefined ? null : Number(e.principalSatang),
+      balance_satang: e.balanceSatang === undefined ? null : Number(e.balanceSatang),
+      source: 'manual',
+    })),
+    { onConflict: 'loan_id,stmt_date' },
+  )
+  if (res.error) throw new Error(translateDbError(res.error))
+}
+
+export async function deleteStatementEntry(loanId: string, stmtDate: ISODate): Promise<void> {
+  const res = await supabase
+    .from('statement_entries')
+    .delete()
+    .eq('loan_id', loanId)
+    .eq('stmt_date', stmtDate)
+  if (res.error) throw new Error(translateDbError(res.error))
+}
+
+/**
+ * บันทึกวิธีคิดดอกที่ค้นพบจากใบแจ้งยอด
+ *
+ * ⚠️ ทับแถวเดิมของวันเดียวกัน แล้วเปลี่ยน source/confidence เป็น inferred/confirmed
+ *    ค่าที่เดาไว้ตอนสร้างสัญญาต้องไม่ค้างอยู่ ไม่งั้น UI ยังเตือนว่าเป็นค่าสมมติทั้งที่ยืนยันแล้ว
+ */
+export async function applyInferredConvention(
+  loanId: string,
+  effectiveFrom: ISODate,
+  c: { dayCountBasis: DayCountBasis; rounding: RoundingMode; capitaliseUnpaidInterest: boolean },
+  note: string,
+): Promise<void> {
+  const res = await supabase.from('loan_conventions').upsert(
+    {
+      loan_id: loanId,
+      effective_from: effectiveFrom,
+      day_count_basis: c.dayCountBasis,
+      interest_rounding: c.rounding,
+      capitalise_unpaid_interest: c.capitaliseUnpaidInterest,
+      source: 'inferred',
+      confidence: 'confirmed',
+      note,
+    },
+    { onConflict: 'loan_id,effective_from' },
+  )
+  if (res.error) throw new Error(translateDbError(res.error))
+}
+
+/** กฎวันตัดที่ค้นพบ — เก็บที่ active_loans เพราะเป็นคุณสมบัติของสัญญา ไม่ใช่ของช่วงเวลา */
+export async function applyDateRule(
+  loanId: string,
+  dateRoll: DateRoll,
+  rollCalendar: RollCalendar,
+): Promise<void> {
+  const res = await supabase
+    .from('active_loans')
+    .update({ date_roll: dateRoll, roll_calendar: rollCalendar })
+    .eq('id', loanId)
+  if (res.error) throw new Error(translateDbError(res.error))
+}
+
+// ---------- วันหยุดธนาคาร ----------
+
+export async function listBankHolidays(): Promise<{ date: ISODate; name: string | null }[]> {
+  const rows = must(
+    await supabase.from('bank_holidays').select('holiday_date, name_th').order('holiday_date'),
+  ) as { holiday_date: string; name_th: string | null }[]
+  return rows.map((r) => ({ date: isoDate(r.holiday_date), name: r.name_th }))
+}
+
+export async function addBankHoliday(date: ISODate, name: string): Promise<void> {
+  const res = await supabase.from('bank_holidays').insert({
+    user_id: await currentUserId(),
+    holiday_date: date,
+    name_th: name.trim() === '' ? null : name.trim(),
+    source: 'user_added',
+  })
   if (res.error) throw new Error(translateDbError(res.error))
 }
 

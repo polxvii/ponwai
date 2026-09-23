@@ -77,6 +77,8 @@ export type PaymentEvent = {
 // ---------- ผลลัพธ์ ----------
 
 export type RowFlag =
+  /** งวดนี้ใช้ยอดที่บันทึกว่าจ่ายจริง ไม่ใช่ค่างวดตามสัญญา */
+  | 'actual_payment'
   | 'negative_amortization'
   | 'below_minimum'
   | 'rate_changed'

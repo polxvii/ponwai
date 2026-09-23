@@ -15,7 +15,7 @@ import {
 } from '@engine/grouping.js'
 import { FIXED_SCALE, type Fixed } from '@engine/money.js'
 import type { ScheduleRow } from '@engine/types.js'
-import { addMonthsClamped, day as dayOf, daysBetween, year as yearOf, type ISODate } from '@engine/date.js'
+import { daysBetween, year as yearOf, type ISODate } from '@engine/date.js'
 import { SplitRibbon } from '@/components/SplitRibbon'
 import { SplitBar, CapMeter } from '@/components/SplitBar'
 import { Field, SelectField } from '@/components/Field'
@@ -29,17 +29,22 @@ const ZERO = 0n as Fixed
 const CAP_BAHT = Number(TAX_DEDUCTION_CAP_SATANG) / 100
 
 /**
- * ช่วงที่กราฟแสดง นับไปข้างหน้าจากวันนี้ — null = ทั้งสัญญา
+ * ความกว้างของหน้าต่างที่กราฟแสดง — null = ทั้งสัญญา
  *
- * สัญญา 30 ปีให้ 19 แท่งรายปีและ 226 จุดในกราฟหนี้ ซึ่งอ่านไม่ออก
- * ตัดเฉพาะหางอนาคต ไม่ตัดอดีต เพราะอดีตคือส่วนที่เล็กกว่าและเป็นข้อมูลจริงที่จ่ายไปแล้ว
+ * ⚠️ เป็น "ความกว้าง" ไม่ใช่ "นับไปข้างหน้าจากวันนี้"
+ *    รอบแรกทำเป็นแบบหลัง เลือก 5 ปีแล้วยังเห็น 7 ปีเพราะอดีตถูกเก็บไว้ทั้งหมด
+ *    ซึ่งขัดกับสิ่งที่ปุ่มบอก ตอนนี้เลือก 5 = เห็น 5 ปีเป๊ะ แล้วเลื่อนหน้าต่างเอาเอง
  */
-const HORIZONS: readonly { years: number | null; label: string }[] = [
+const WINDOWS: readonly { years: number | null; label: string }[] = [
+  { years: 3, label: '3 ปี' },
   { years: 5, label: '5 ปี' },
   { years: 10, label: '10 ปี' },
-  { years: 15, label: '15 ปี' },
   { years: null, label: 'ทั้งหมด' },
 ]
+
+function clamp(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v
+}
 
 export function DashboardPage({
   bundles,
@@ -52,7 +57,9 @@ export function DashboardPage({
 }) {
   const [selectedId, setSelectedId] = useState<string>(() => bundles[0]?.item.loanId ?? '')
   const [axis, setAxis] = useState<GroupAxis>('contract_year')
-  const [horizonYears, setHorizonYears] = useState<number | null>(10)
+  const [windowYears, setWindowYears] = useState<number | null>(5)
+  /** หน้าต่างเริ่มที่ปีไหน — null = ตามปีปัจจุบัน ไม่ใช่ปีแรกของสัญญา */
+  const [windowStart, setWindowStart] = useState<number | null>(null)
 
   const computed = useMemo(
     () =>
@@ -100,16 +107,26 @@ export function DashboardPage({
   const rows = selected.actual.rows
   const currentIndex = periodsElapsed(rows, today)
 
-  // วันสุดท้ายที่กราฟแสดง — เก็บอดีตไว้ทั้งหมด ตัดเฉพาะอนาคตที่ไกลเกินจะวางแผนได้
-  const cutoff: ISODate | null =
-    horizonYears === null ? null : addMonthsClamped(today, horizonYears * 12, dayOf(today))
-  const inRange = (r: ScheduleRow): boolean => cutoff === null || r.date <= cutoff
-  const viewRows = cutoff === null ? rows : rows.filter(inRange)
+  // ---------- หน้าต่างที่กราฟแสดง ----------
+  const firstYear = yearOf(rows[0]?.date ?? today)
+  const finalYear = yearOf(rows[rows.length - 1]?.date ?? today)
+  const defaultStart = clamp(yearOf(today), firstYear, finalYear)
+  const winFrom =
+    windowYears === null ? firstYear : clamp(windowStart ?? defaultStart, firstYear, finalYear)
+  const winTo = windowYears === null ? finalYear : winFrom + windowYears - 1
+
+  const inRange = (r: ScheduleRow): boolean => {
+    const y = yearOf(r.date)
+    return y >= winFrom && y <= winTo
+  }
+  const viewRows = windowYears === null ? rows : rows.filter(inRange)
   const viewNoPrepay =
-    cutoff === null ? selected.noPrepay.rows : selected.noPrepay.rows.filter(inRange)
+    windowYears === null ? selected.noPrepay.rows : selected.noPrepay.rows.filter(inRange)
   const viewTax =
-    cutoff === null ? taxYears : taxYears.filter((t) => t.taxYear <= yearOf(cutoff))
-  const trimmed = rows.length - viewRows.length
+    windowYears === null
+      ? taxYears
+      : taxYears.filter((t) => t.taxYear >= winFrom && t.taxYear <= winTo)
+  const shift = (delta: number) => setWindowStart(clamp(winFrom + delta, firstYear, finalYear))
   const currentRow = currentIndex > 0 ? rows[currentIndex - 1] : undefined
   const nextRow = rows[currentIndex]
   const balance = balanceAt(rows, today, selected.item)
@@ -262,13 +279,16 @@ export function DashboardPage({
               ช่วงที่แสดง
             </span>
             <div className="mt-1 flex gap-1">
-              {HORIZONS.map((h) => (
+              {WINDOWS.map((h) => (
                 <button
                   key={h.label}
-                  onClick={() => setHorizonYears(h.years)}
-                  aria-pressed={horizonYears === h.years}
+                  onClick={() => {
+                    setWindowYears(h.years)
+                    setWindowStart(null)
+                  }}
+                  aria-pressed={windowYears === h.years}
                   className={`tap rounded-md border px-3 py-2 text-[var(--text-meta)] whitespace-nowrap ${
-                    horizonYears === h.years
+                    windowYears === h.years
                       ? 'border-[var(--color-interest)] bg-[var(--color-interest-tint)] text-[var(--color-interest)]'
                       : 'border-[var(--color-rule)] text-[var(--color-ink-2)] hover:text-[var(--color-ink)]'
                   }`}
@@ -278,11 +298,42 @@ export function DashboardPage({
               ))}
             </div>
           </div>
+
+          {/* เลื่อนหน้าต่างทีละปี เพื่อโฟกัสช่วงที่อยากดู */}
+          {windowYears !== null && (
+            <div>
+              <span className="block text-[var(--text-meta)] text-[var(--color-ink-2)]">
+                โฟกัสปี
+              </span>
+              <div className="mt-1 flex items-center gap-2">
+                <button
+                  onClick={() => shift(-1)}
+                  disabled={winFrom <= firstYear}
+                  aria-label="ย้อนกลับหนึ่งปี"
+                  className="tap rounded-md border border-[var(--color-rule)] px-3 py-2 disabled:opacity-40"
+                >
+                  ←
+                </button>
+                <span className="num min-w-[112px] text-center text-[var(--text-meta)]">
+                  {winFrom + 543} – {Math.min(winTo, finalYear) + 543}
+                </span>
+                <button
+                  onClick={() => shift(1)}
+                  disabled={winTo >= finalYear}
+                  aria-label="ถัดไปหนึ่งปี"
+                  className="tap rounded-md border border-[var(--color-rule)] px-3 py-2 disabled:opacity-40"
+                >
+                  →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {trimmed > 0 && (
+        {windowYears !== null && (
           <p className="mt-2 text-[var(--text-meta)] text-[var(--color-ink-3)]">
-            ซ่อน {trimmed} งวดหลังจาก {formatThaiDate(cutoff!, 'monthYear')} — กด &quot;ทั้งหมด&quot; เพื่อดูจนจบสัญญา
+            แสดง {viewRows.length} งวด จากทั้งหมด {rows.length} งวด · สัญญาถึงปี{' '}
+            {finalYear + 543}
           </p>
         )}
 
