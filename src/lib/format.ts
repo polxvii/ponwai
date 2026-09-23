@@ -126,3 +126,13 @@ export function freshnessLabel(
   const months = Math.floor(days / 30)
   return { text: `อัปเดต ${months} เดือนที่แล้ว`, stale: days > 90 }
 }
+
+/**
+ * ช่วงเดือนของกลุ่มงวด เช่น "ม.ค. 2570 – ธ.ค. 2570"
+ * "ปีสัญญาที่ 3" อย่างเดียวไม่บอกว่าเป็นเดือนไหนของปีไหน ต้องกางปฏิทินในหัวเอง
+ */
+export function formatMonthSpan(from: ISODate, to: ISODate): string {
+  const a = formatThaiDate(from, 'monthYear')
+  const b = formatThaiDate(to, 'monthYear')
+  return a === b ? a : `${a} – ${b}`
+}

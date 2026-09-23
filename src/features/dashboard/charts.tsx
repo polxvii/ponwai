@@ -13,7 +13,7 @@ import {
 import type { ScheduleRow } from '@engine/types.js'
 import { FIXED_SCALE, type Fixed } from '@engine/money.js'
 import { groupSchedule, type GroupAxis, type TaxYearSummary } from '@engine/grouping.js'
-import { bahtRounded } from '@/lib/format'
+import { bahtRounded, formatMonthSpan } from '@/lib/format'
 
 const toBaht = (v: Fixed): number => Number(v / FIXED_SCALE) / 100
 
@@ -130,10 +130,13 @@ export function YearBarsChart({
 
   const data = groups.map((g) => ({
     label: g.label.replace('ปีสัญญาที่ ', 'ปี '),
+    // ปีสัญญาไม่ตรงปีปฏิทิน ต้องบอกช่วงเดือนไม่งั้นอ่านแกน x แล้วไม่รู้ว่าเมื่อไหร่
+    span: formatMonthSpan(g.rows[0]!.date, g.rows[g.rows.length - 1]!.date),
     interest: toBaht(g.interestFixed),
     principal: toBaht(g.principalFixed),
-    partial: g.isPartialYear,
   }))
+
+  const spanOf = (label: string): string => data.find((d) => d.label === label)?.span ?? ''
 
   return (
     <figure className="mt-8">
@@ -155,6 +158,7 @@ export function YearBarsChart({
             <YAxis tick={axisTick} stroke="var(--color-rule)" width={56} tickFormatter={compact} />
             <Tooltip
               contentStyle={tooltipStyle}
+              labelFormatter={(l) => `${String(l)} · ${spanOf(String(l))}`}
               formatter={(v, name) => [
                 `${Math.round(Number(v)).toLocaleString('en-US')} บาท`,
                 name === 'interest' ? 'ดอกเบี้ย' : 'เงินต้น',

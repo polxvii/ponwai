@@ -14,7 +14,7 @@ import type { Fixed, Satang } from '@engine/money.js'
 import type { PaymentKind, ScheduleRow } from '@engine/types.js'
 import { Field, NumberField, SelectField, TextField, DateField } from '@/components/Field'
 import { SplitBar } from '@/components/SplitBar'
-import { baht, bahtRounded, formatDuration, formatThaiDate, pct } from '@/lib/format'
+import { baht, bahtRounded, formatDuration, formatMonthSpan, formatThaiDate, pct } from '@/lib/format'
 import {
   addPayment, getLoanFull, removePayment, toLoanTerms, toPaymentEvents,
   type LoanFull, type LoanListItem,
@@ -355,13 +355,19 @@ function YearTable({ rows, axis }: { rows: readonly ScheduleRow[]; axis: GroupAx
           {groups.map((g) => (
             <tr key={g.key} className="border-b border-[var(--color-rule)]">
               <td className="py-2 pr-4">
-                {g.label}
-                {/* ปีแรกกับปีสุดท้ายมักไม่ครบ 12 งวด ถ้าไม่ติดป้ายจะเอาไปเทียบกับปีเต็มแล้วสรุปผิด */}
-                {g.isPartialYear && (
-                  <span className="ml-2 text-[var(--text-micro)] text-[var(--color-ink-3)]">
-                    ไม่ครบปี
-                  </span>
-                )}
+                <span className="whitespace-nowrap">
+                  {g.label}
+                  {/* ปีแรกกับปีสุดท้ายมักไม่ครบ 12 งวด ถ้าไม่ติดป้ายจะเอาไปเทียบกับปีเต็มแล้วสรุปผิด */}
+                  {g.isPartialYear && (
+                    <span className="ml-2 text-[var(--text-micro)] text-[var(--color-ink-3)]">
+                      ไม่ครบปี
+                    </span>
+                  )}
+                </span>
+                {/* ปีสัญญาไม่ตรงปีปฏิทิน ถ้าไม่บอกเดือนต้องกางปฏิทินในหัวเอง */}
+                <span className="block text-[var(--text-micro)] whitespace-nowrap text-[var(--color-ink-3)]">
+                  {formatMonthSpan(g.rows[0]!.date, g.rows[g.rows.length - 1]!.date)}
+                </span>
               </td>
               <TdRight>{g.periodCount}</TdRight>
               <TdRight>{bahtRounded(g.interestFixed)}</TdRight>

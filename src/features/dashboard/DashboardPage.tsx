@@ -15,7 +15,7 @@ import {
 } from '@engine/grouping.js'
 import { FIXED_SCALE, type Fixed } from '@engine/money.js'
 import type { ScheduleRow } from '@engine/types.js'
-import { daysBetween, type ISODate } from '@engine/date.js'
+import { addMonthsClamped, day as dayOf, daysBetween, year as yearOf, type ISODate } from '@engine/date.js'
 import { SplitRibbon } from '@/components/SplitRibbon'
 import { SplitBar, CapMeter } from '@/components/SplitBar'
 import { Field, SelectField } from '@/components/Field'
@@ -28,6 +28,19 @@ export type LoanBundle = { item: LoanListItem; full: LoanFull }
 const ZERO = 0n as Fixed
 const CAP_BAHT = Number(TAX_DEDUCTION_CAP_SATANG) / 100
 
+/**
+ * ช่วงที่กราฟแสดง นับไปข้างหน้าจากวันนี้ — null = ทั้งสัญญา
+ *
+ * สัญญา 30 ปีให้ 19 แท่งรายปีและ 226 จุดในกราฟหนี้ ซึ่งอ่านไม่ออก
+ * ตัดเฉพาะหางอนาคต ไม่ตัดอดีต เพราะอดีตคือส่วนที่เล็กกว่าและเป็นข้อมูลจริงที่จ่ายไปแล้ว
+ */
+const HORIZONS: readonly { years: number | null; label: string }[] = [
+  { years: 5, label: '5 ปี' },
+  { years: 10, label: '10 ปี' },
+  { years: 15, label: '15 ปี' },
+  { years: null, label: 'ทั้งหมด' },
+]
+
 export function DashboardPage({
   bundles,
   today,
@@ -39,6 +52,7 @@ export function DashboardPage({
 }) {
   const [selectedId, setSelectedId] = useState<string>(() => bundles[0]?.item.loanId ?? '')
   const [axis, setAxis] = useState<GroupAxis>('contract_year')
+  const [horizonYears, setHorizonYears] = useState<number | null>(10)
 
   const computed = useMemo(
     () =>
@@ -85,6 +99,17 @@ export function DashboardPage({
 
   const rows = selected.actual.rows
   const currentIndex = periodsElapsed(rows, today)
+
+  // วันสุดท้ายที่กราฟแสดง — เก็บอดีตไว้ทั้งหมด ตัดเฉพาะอนาคตที่ไกลเกินจะวางแผนได้
+  const cutoff: ISODate | null =
+    horizonYears === null ? null : addMonthsClamped(today, horizonYears * 12, dayOf(today))
+  const inRange = (r: ScheduleRow): boolean => cutoff === null || r.date <= cutoff
+  const viewRows = cutoff === null ? rows : rows.filter(inRange)
+  const viewNoPrepay =
+    cutoff === null ? selected.noPrepay.rows : selected.noPrepay.rows.filter(inRange)
+  const viewTax =
+    cutoff === null ? taxYears : taxYears.filter((t) => t.taxYear <= yearOf(cutoff))
+  const trimmed = rows.length - viewRows.length
   const currentRow = currentIndex > 0 ? rows[currentIndex - 1] : undefined
   const nextRow = rows[currentIndex]
   const balance = balanceAt(rows, today, selected.item)
@@ -218,22 +243,52 @@ export function DashboardPage({
 
       {/* ---------- กราฟ ---------- */}
       <div className="mt-2">
-        <div className="mt-8 max-w-[280px]">
-          <Field label="นับปีแบบ">
-            <SelectField
-              value={axis}
-              onChange={setAxis}
-              options={[
-                { value: 'contract_year' as const, label: 'ปีสัญญา' },
-                { value: 'calendar_year' as const, label: 'ปีปฏิทิน' },
-              ]}
-            />
-          </Field>
+        <div className="mt-8 flex flex-wrap items-end gap-x-6 gap-y-3">
+          <div className="max-w-[240px] min-w-[180px] flex-1">
+            <Field label="นับปีแบบ">
+              <SelectField
+                value={axis}
+                onChange={setAxis}
+                options={[
+                  { value: 'contract_year' as const, label: 'ปีสัญญา' },
+                  { value: 'calendar_year' as const, label: 'ปีปฏิทิน' },
+                ]}
+              />
+            </Field>
+          </div>
+
+          <div>
+            <span className="block text-[var(--text-meta)] text-[var(--color-ink-2)]">
+              ช่วงที่แสดง
+            </span>
+            <div className="mt-1 flex gap-1">
+              {HORIZONS.map((h) => (
+                <button
+                  key={h.label}
+                  onClick={() => setHorizonYears(h.years)}
+                  aria-pressed={horizonYears === h.years}
+                  className={`tap rounded-md border px-3 py-2 text-[var(--text-meta)] whitespace-nowrap ${
+                    horizonYears === h.years
+                      ? 'border-[var(--color-interest)] bg-[var(--color-interest-tint)] text-[var(--color-interest)]'
+                      : 'border-[var(--color-rule)] text-[var(--color-ink-2)] hover:text-[var(--color-ink)]'
+                  }`}
+                >
+                  {h.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        <YearBarsChart rows={rows} axis={axis} />
-        <BalanceChart actual={rows} noPrepay={selected.noPrepay.rows} />
-        <TaxChart summaries={taxYears} capBaht={CAP_BAHT} />
+        {trimmed > 0 && (
+          <p className="mt-2 text-[var(--text-meta)] text-[var(--color-ink-3)]">
+            ซ่อน {trimmed} งวดหลังจาก {formatThaiDate(cutoff!, 'monthYear')} — กด &quot;ทั้งหมด&quot; เพื่อดูจนจบสัญญา
+          </p>
+        )}
+
+        <YearBarsChart rows={viewRows} axis={axis} />
+        <BalanceChart actual={viewRows} noPrepay={viewNoPrepay} />
+        <TaxChart summaries={viewTax} capBaht={CAP_BAHT} />
       </div>
 
       <button
