@@ -10,6 +10,9 @@ import { useAuth } from '@/lib/auth'
 import { baht, formatDuration, formatThaiDate } from '@/lib/format'
 import { deleteLoan, getAllLoansFull, type LoanListItem } from '@/lib/db'
 import { DashboardPage, type LoanBundle } from '../dashboard/DashboardPage'
+import { PrepayPage } from '../prepay/PrepayPage'
+import { buildSchedule } from '@engine/schedule.js'
+import { toLoanTerms, toPaymentEvents } from '@/lib/db'
 import { LoanForm } from './LoanForm'
 import { LoanDetail } from './LoanDetail'
 import { todayISO } from './model'
@@ -23,6 +26,7 @@ type View =
   | { kind: 'list' }
   | { kind: 'new' }
   | { kind: 'detail'; item: LoanListItem }
+  | { kind: 'prepay'; item: LoanListItem }
 
 export function TrackPage({ onSignIn }: { onSignIn: () => void }) {
   const { user, loading } = useAuth()
@@ -81,8 +85,32 @@ function TrackShell() {
           setView({ kind: 'dashboard' })
           reload()
         }}
+        onPlanPrepay={() => setView({ kind: 'prepay', item: view.item })}
       />
     )
+  }
+
+  if (view.kind === 'prepay' && bundles !== null) {
+    const bundle = bundles.find((b) => b.item.loanId === view.item.loanId)
+    if (bundle) {
+      // เพดานลดหย่อนภาษีเป็นของคนหนึ่งคน ต้องส่งสัญญาอื่นไปด้วย ไม่งั้นบอกว่า
+      // โปะแล้วเสียสิทธิ ทั้งที่สิทธิเต็มไปแล้วจากอีกสัญญา (ข้อ 1.9)
+      const others = bundles
+        .filter((b) => b.item.loanId !== view.item.loanId)
+        .map((b) => ({
+          loanId: b.item.loanId,
+          rows: buildSchedule(toLoanTerms(b.full), toPaymentEvents(b.full)).rows,
+        }))
+      return (
+        <PrepayPage
+          item={bundle.item}
+          full={bundle.full}
+          otherLoans={others}
+          today={todayISO()}
+          onBack={() => setView({ kind: 'detail', item: view.item })}
+        />
+      )
+    }
   }
 
   if (view.kind === 'dashboard' && bundles !== null && bundles.length > 0) {

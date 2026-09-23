@@ -21,6 +21,7 @@ import type {
   LoanConvention, LoanTerms, PaymentEvent, PaymentKind, RateStep,
 } from '@engine/types.js'
 import type { DayCountBasis } from '@engine/accrual.js'
+import type { PrepayPlan } from '@engine/prepay.js'
 import type { RoundingMode } from '@engine/money.js'
 
 const sat = (n: number | null | undefined): Satang => BigInt(Math.round(n ?? 0)) as Satang
@@ -436,6 +437,167 @@ export async function removePayment(paymentId: string): Promise<void> {
     .from('payments')
     .update({ deleted_at: new Date().toISOString() })
     .eq('id', paymentId)
+  if (res.error) throw new Error(translateDbError(res.error))
+}
+
+// ---------- แผนโปะ (scenario) ----------
+
+export type ScenarioSummary = { id: string; name: string; createdAt: string }
+
+export async function listScenarios(loanId: string): Promise<ScenarioSummary[]> {
+  const rows = must(
+    await supabase
+      .from('scenarios')
+      .select('id, name, created_at')
+      .eq('loan_id', loanId)
+      .order('created_at'),
+  ) as { id: string; name: string; created_at: string }[]
+  return rows.map((r) => ({ id: r.id, name: r.name, createdAt: r.created_at }))
+}
+
+/**
+ * บันทึกแผนโปะเป็น scenario
+ *
+ * ⚠️ เก็บเฉพาะเดือนที่ยอดไม่เป็นศูนย์ ไม่ใช่ 12 แถวเสมอ
+ *    เพราะ 0 กับ "ไม่ได้ตั้ง" ต่างกันตอน resolve: override ที่เป็น 0 ชนะแผนฐาน
+ *    ถ้าเขียน 0 ลงไปหมดทุกเดือน แผนฐานจะไม่มีผลเลย
+ */
+export async function saveScenario(
+  loanId: string,
+  name: string,
+  plan: PrepayPlan,
+): Promise<string> {
+  const scenario = must(
+    await supabase.from('scenarios').insert({ loan_id: loanId, name }).select('id').single(),
+  ) as { id: string }
+
+  try {
+    const planRow = must(
+      await supabase
+        .from('prepay_plans')
+        .insert({
+          scenario_id: scenario.id,
+          base_year: plan.baseYear,
+          repeat_mode: plan.repeatMode,
+          repeat_until_year: plan.repeatUntilYear,
+        })
+        .select('id')
+        .single(),
+    ) as { id: string }
+
+    const months = Object.entries(plan.months)
+      .filter(([, v]) => v > 0n)
+      .map(([m, v]) => ({ plan_id: planRow.id, month: Number(m), amount_satang: Number(v) }))
+    if (months.length > 0) must(await supabase.from('prepay_months').insert(months).select('id'))
+
+    const overrides: { plan_id: string; year: number; month: number; amount_satang: number }[] = []
+    for (const [y, byMonth] of Object.entries(plan.overrides)) {
+      for (const [m, v] of Object.entries(byMonth)) {
+        overrides.push({
+          plan_id: planRow.id,
+          year: Number(y),
+          month: Number(m),
+          amount_satang: Number(v),
+        })
+      }
+    }
+    if (overrides.length > 0) {
+      must(await supabase.from('prepay_overrides').insert(overrides).select('id'))
+    }
+
+    const lumps = plan.lumps.map((l) => ({
+      plan_id: planRow.id,
+      pay_date: l.payDate,
+      amount_satang: Number(l.amountSatang),
+      label: l.label ?? null,
+    }))
+    if (lumps.length > 0) must(await supabase.from('prepay_lumps').insert(lumps).select('id'))
+
+    return scenario.id
+  } catch (e) {
+    // PostgREST ไม่มี transaction ข้าม request ลบหัวทิ้งให้ cascade เก็บลูก
+    await supabase.from('scenarios').delete().eq('id', scenario.id)
+    throw e
+  }
+}
+
+export async function loadScenario(scenarioId: string): Promise<PrepayPlan> {
+  const planRow = must(
+    await supabase
+      .from('prepay_plans')
+      .select('id, base_year, repeat_mode, repeat_until_year')
+      .eq('scenario_id', scenarioId)
+      .single(),
+  ) as {
+    id: string
+    base_year: number
+    repeat_mode: PrepayPlan['repeatMode']
+    repeat_until_year: number | null
+  }
+
+  const [m, o, l] = await Promise.all([
+    supabase.from('prepay_months').select('month, amount_satang').eq('plan_id', planRow.id),
+    supabase
+      .from('prepay_overrides')
+      .select('year, month, amount_satang')
+      .eq('plan_id', planRow.id),
+    supabase
+      .from('prepay_lumps')
+      .select('pay_date, amount_satang, label')
+      .eq('plan_id', planRow.id)
+      .order('pay_date'),
+  ])
+
+  const months: Record<number, Satang> = {}
+  for (const r of must(m) as { month: number; amount_satang: number }[]) {
+    months[r.month] = sat(r.amount_satang)
+  }
+
+  const overrides: Record<number, Record<number, Satang>> = {}
+  for (const r of must(o) as { year: number; month: number; amount_satang: number }[]) {
+    overrides[r.year] = { ...overrides[r.year], [r.month]: sat(r.amount_satang) }
+  }
+
+  return {
+    baseYear: planRow.base_year,
+    repeatMode: planRow.repeat_mode,
+    repeatUntilYear: planRow.repeat_until_year,
+    months,
+    overrides,
+    lumps: (must(l) as { pay_date: string; amount_satang: number; label: string | null }[]).map(
+      (r) => ({
+        payDate: isoDate(r.pay_date),
+        amountSatang: sat(r.amount_satang),
+        ...(r.label !== null ? { label: r.label } : {}),
+      }),
+    ),
+  }
+}
+
+export async function deleteScenario(scenarioId: string): Promise<void> {
+  const res = await supabase.from('scenarios').delete().eq('id', scenarioId)
+  if (res.error) throw new Error(translateDbError(res.error))
+}
+
+// ---------- การตั้งค่าของผู้ใช้ ----------
+
+/**
+ * อัตราภาษีขั้นบันไดสูงสุดของผู้ใช้ — null = ยังไม่กรอก
+ * ⛔ ห้ามเดาค่าแทนผู้ใช้ ถ้าไม่มีให้ซ่อนคอลัมน์ ROI หลังภาษีไปเลย (ข้อ 3.4)
+ */
+export async function getMarginalTaxRateBps(): Promise<number | null> {
+  const res = await supabase.from('user_prefs').select('marginal_tax_rate_bps').maybeSingle()
+  if (res.error) throw new Error(translateDbError(res.error))
+  return (res.data as { marginal_tax_rate_bps: number | null } | null)?.marginal_tax_rate_bps ?? null
+}
+
+export async function setMarginalTaxRateBps(rateBps: number | null): Promise<void> {
+  const res = await supabase
+    .from('user_prefs')
+    .upsert(
+      { user_id: await currentUserId(), marginal_tax_rate_bps: rateBps, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' },
+    )
   if (res.error) throw new Error(translateDbError(res.error))
 }
 

@@ -24,7 +24,15 @@ import { todayISO } from './model'
 
 const FIXED = 1_000_000_000_000n
 
-export function LoanDetail({ item, onBack }: { item: LoanListItem; onBack: () => void }) {
+export function LoanDetail({
+  item,
+  onBack,
+  onPlanPrepay,
+}: {
+  item: LoanListItem
+  onBack: () => void
+  onPlanPrepay: () => void
+}) {
   const [full, setFull] = useState<LoanFull | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [axis, setAxis] = useState<GroupAxis>('contract_year')
@@ -137,6 +145,13 @@ export function LoanDetail({ item, onBack }: { item: LoanListItem; onBack: () =>
           />
         </dl>
       </section>
+
+      <button
+        onClick={onPlanPrepay}
+        className="tap mt-6 rounded-md bg-[var(--color-principal)] px-4 py-2.5 text-[var(--color-ink)]"
+      >
+        วางแผนโปะ →
+      </button>
 
       {/* ---------- การจ่าย ---------- */}
       <PaymentSection

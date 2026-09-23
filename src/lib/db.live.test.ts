@@ -13,8 +13,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { supabase } from './supabase'
 import {
-  addPayment, createLoan, deleteLoan, getLoanFull, listLoans, removePayment,
-  toLoanTerms, toPaymentEvents,
+  addPayment, createLoan, deleteLoan, deleteScenario, getLoanFull, listLoans, listScenarios,
+  loadScenario, removePayment, saveScenario, toLoanTerms, toPaymentEvents,
 } from './db'
 
 function must<T>(res: { data: T | null; error: unknown }): T {
@@ -183,6 +183,38 @@ describe.skipIf(EMAIL === '' || PASSWORD === '')('db.ts กับ Supabase จ�
       .update({ rate_bps: 1 })
       .eq('id', ins.data.id)
     expect(upd.error).not.toBeNull()
+  }, 30_000)
+
+  it('แผนโปะบันทึกแล้วอ่านกลับมาได้เหมือนเดิม', async () => {
+    const plan = {
+      baseYear: 2026,
+      repeatMode: 'repeat_until' as const,
+      repeatUntilYear: 2030,
+      months: { 4: baht(4_000) as Satang, 11: baht(4_500) as Satang },
+      // ⚠️ override ที่เป็น 0 ต้องรอด ไม่ใช่ถูกตัดทิ้งเหมือน months ที่เป็น 0
+      //    เพราะ 0 แปลว่า "ปีนี้เดือนนี้ไม่โปะ" ซึ่งชนะแผนฐาน
+      overrides: { 2028: { 4: 0n as Satang, 5: baht(9_000) as Satang } },
+      lumps: [
+        { payDate: isoDate('2026-12-05'), amountSatang: baht(50_000) as Satang, label: 'โบนัส' },
+      ],
+    }
+
+    const scenarioId = await saveScenario(loanId, 'แผนทดสอบ', plan)
+    expect(await listScenarios(loanId)).toHaveLength(1)
+
+    const back = await loadScenario(scenarioId)
+    expect(back.baseYear).toBe(2026)
+    expect(back.repeatMode).toBe('repeat_until')
+    expect(back.repeatUntilYear).toBe(2030)
+    expect(Number(back.months[4])).toBe(400_000)
+    expect(Number(back.months[11])).toBe(450_000)
+    expect(Number(back.overrides[2028]![4])).toBe(0)
+    expect(Number(back.overrides[2028]![5])).toBe(900_000)
+    expect(back.lumps).toHaveLength(1)
+    expect(back.lumps[0]!.label).toBe('โบนัส')
+
+    await deleteScenario(scenarioId)
+    expect(await listScenarios(loanId)).toHaveLength(0)
   }, 30_000)
 
   it('deleteLoan ลบสัญญา ลูก และทรัพย์สินที่ไม่เหลือสัญญา', async () => {
