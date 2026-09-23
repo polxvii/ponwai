@@ -17,17 +17,37 @@ const VERSION = 'v1'
 const SHELL = `ponwai-shell-${VERSION}`
 const ASSETS = `ponwai-assets-${VERSION}`
 
-/** ไฟล์ที่ต้องมีเสมอเพื่อให้เปิดแอพได้ ที่เหลือเก็บตอนโหลดจริงครั้งแรก */
-const SHELL_URLS = ['/', '/manifest.webmanifest', '/icon-192.png', '/favicon-32.png']
+/** ไฟล์คงที่ที่ต้องมีเสมอ ส่วนชื่อ bundle มี hash จึงต้องอ่านจาก index.html ตอนติดตั้ง */
+const SHELL_URLS = ['/manifest.webmanifest', '/icon-192.png', '/favicon-32.png']
+
+/**
+ * ⚠️ ต้อง precache ตัว bundle ด้วย ไม่ใช่หวังว่าจะติดมาเองตอนโหลดครั้งแรก
+ *    SW ลงทะเบียนหลัง load ยิงแล้ว จึงยังไม่ได้คุมหน้าในรอบแรก
+ *    ทุก request ของ /assets/* รอบนั้นเลยไม่ผ่าน fetch handler และไม่เข้า cache
+ *    ผลคือเปิดออฟไลน์ครั้งแรกได้ shell แต่สคริปต์โหลดไม่ได้ = หน้าขาว
+ *    (บิลด์นี้ไม่มี code splitting จึงไม่มี request หลัง load มา backfill ให้ด้วย)
+ */
+async function precache() {
+  const shell = await caches.open(SHELL)
+  // ไฟล์ใดไฟล์หนึ่งพังต้องไม่ทำให้ติดตั้งล้มทั้งชุด
+  await Promise.allSettled(SHELL_URLS.map((u) => shell.add(u)))
+
+  const res = await fetch('/', { cache: 'reload' })
+  if (!res.ok) return
+  const html = await res.text()
+  await shell.put('/', new Response(html, { headers: res.headers }))
+
+  const urls = [...new Set([...html.matchAll(/["'](\/assets\/[^"']+)["']/g)].map((m) => m[1]))]
+  const assets = await caches.open(ASSETS)
+  await Promise.allSettled(urls.map((u) => assets.add(u)))
+}
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches
-      .open(SHELL)
-      // ไฟล์ใดไฟล์หนึ่งพังต้องไม่ทำให้ติดตั้งล้มทั้งชุด
-      .then((cache) => Promise.allSettled(SHELL_URLS.map((u) => cache.add(u))))
-      .then(() => self.skipWaiting()),
-  )
+  // ⛔ ห้ามเรียก skipWaiting() ตรงนี้
+  //    ตัวใหม่จะข้ามสถานะ waiting ไปเลย แล้ว reg.waiting เป็น null ตลอด
+  //    ปุ่ม "โหลดใหม่" ที่ส่ง postMessage ไปหา waiting จึงกลายเป็นปุ่มตาย
+  //    ปล่อยให้รออยู่ แล้วค่อย skip ตอนผู้ใช้กดเองผ่าน message handler ข้างล่าง
+  event.waitUntil(precache())
 })
 
 self.addEventListener('activate', (event) => {
@@ -67,8 +87,19 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone()
-          void caches.open(SHELL).then((c) => c.put('/', copy))
+          // ⛔ ห้ามเก็บ response ที่ไม่ใช่ 200 เป็น app shell
+          //    หน้า 5xx ตอน deploy หรือหน้า challenge จะถูกเสิร์ฟแทนแอพตอนออฟไลน์
+          //    และ offlinePage() จะไม่มีวันได้ทำงาน เพราะ cache hit เป็น truthy
+          //    ส่วน redirected ใส่ cache ไม่ได้ ตอนดึงมาใช้กับ navigate จะ error
+          if (res.ok && !res.redirected) {
+            const copy = res.clone()
+            void caches
+              .open(SHELL)
+              .then((c) => c.put('/', copy))
+              .catch(() => {
+                /* Vary: * หรือ 206 ใส่ไม่ได้ ปล่อยผ่าน ดีกว่า unhandled rejection */
+              })
+          }
           return res
         })
         .catch(() => caches.match('/').then((r) => r ?? offlinePage())),
@@ -81,13 +112,19 @@ self.addEventListener('fetch', (event) => {
     caches.match(req).then(
       (hit) =>
         hit ??
-        fetch(req).then((res) => {
-          if (res.ok && (sameOrigin || isFont)) {
-            const copy = res.clone()
-            void caches.open(ASSETS).then((c) => c.put(req, copy))
-          }
-          return res
-        }),
+        fetch(req)
+          .then((res) => {
+            // ฟอนต์จาก Google เป็น opaque ไม่ได้ (index.html ใส่ crossorigin แล้ว)
+            // ถ้าเจอ opaque แปลว่าลืม crossorigin — เก็บไว้ไม่ได้เพราะเช็คความถูกต้องไม่ได้
+            if (res.ok && (sameOrigin || isFont)) {
+              const copy = res.clone()
+              void caches.open(ASSETS).then((c) => c.put(req, copy)).catch(() => {})
+            }
+            return res
+          })
+          // ออฟไลน์แล้วไม่มีใน cache — ตอบ 504 ไปตรง ๆ
+          // ปล่อยให้ respondWith reject จะกลายเป็น net::ERR_FAILED ซึ่งดีบั๊กยากกว่ามาก
+          .catch(() => new Response('', { status: 504, statusText: 'offline' })),
     ),
   )
 })

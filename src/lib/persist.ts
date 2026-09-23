@@ -11,8 +11,33 @@
 
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 
-/** ขึ้นเลขเวอร์ชันเมื่อโครงสร้างที่เก็บเปลี่ยนจนของเก่าใช้ไม่ได้ */
-const PREFIX = 'ponwai:v1:'
+/**
+ * ขึ้นเลขเวอร์ชันเมื่อโครงสร้างที่เก็บเปลี่ยนจนของเก่าใช้ไม่ได้
+ *
+ * v2 — เลิกใส่ค่าตัวอย่างในฟอร์มเปรียบเทียบ/รีไฟแนนซ์
+ *   ⚠️ การลบ default ในโค้ดอย่างเดียวไม่พอ
+ *      useEffect ข้างล่างเขียนค่าตั้งต้นลง storage ตั้งแต่ mount แรกแม้ผู้ใช้ยังไม่พิมพ์อะไร
+ *      ใครที่เคยเปิดบิลด์ก่อนจึงมีเลขตัวอย่างค้างอยู่ และ revive ทุกตัว spread ของเก่าทับค่าว่าง
+ *      ของเก่าเลยชนะเสมอ — ต้องเปลี่ยนคีย์เท่านั้นถึงจะหลุด
+ */
+export const PREFIX = 'ponwai:v2:'
+
+/**
+ * ล้างคีย์เวอร์ชันเก่าทิ้งครั้งเดียวตอนโหลดโมดูล
+ * ไม่งั้นขยะค้างใน storage ตลอดไปและกินโควต้าของโดเมนไปเปล่า ๆ
+ */
+function sweepOldVersions(): void {
+  try {
+    const stale = Object.keys(localStorage).filter(
+      (k) => k.startsWith('ponwai:') && !k.startsWith(PREFIX),
+    )
+    for (const k of stale) localStorage.removeItem(k)
+  } catch {
+    /* เบราว์เซอร์ปิด storage — ไม่มีอะไรให้ล้างอยู่แล้ว */
+  }
+}
+
+if (typeof localStorage !== 'undefined') sweepOldVersions()
 
 export function useLocalState<T>(
   key: string,

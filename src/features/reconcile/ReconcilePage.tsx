@@ -194,14 +194,14 @@ export function ReconcilePage({
     <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
       <button
         onClick={onBack}
-        className="tap mb-4 text-[var(--text-meta)] text-[var(--color-interest)] hover:underline"
+        className="tap mb-4 text-meta text-[var(--color-interest)] hover:underline"
       >
         ← กลับ
       </button>
 
       <header className="mb-6">
-        <h1 className="text-[var(--text-hero)]">กระทบยอดกับใบแจ้งยอด</h1>
-        <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+        <h1 className="text-hero">กระทบยอดกับใบแจ้งยอด</h1>
+        <p className="mt-1 text-meta text-[var(--color-ink-2)]">
           {item.propertyName} · {item.bankLabel} — กรอกตัวเลขจากใบแจ้งยอดจริง
           แล้วแอพจะหาว่าธนาคารคิดดอกด้วยวิธีไหน
         </p>
@@ -209,8 +209,8 @@ export function ReconcilePage({
 
       {/* ---------- กรอกใบแจ้งยอด ---------- */}
       <section className="rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4">
-        <h2 className="text-[var(--text-row)]">เพิ่มงวดจากใบแจ้งยอด</h2>
-        <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+        <h2 className="text-row">เพิ่มงวดจากใบแจ้งยอด</h2>
+        <p className="mt-1 text-meta text-[var(--color-ink-2)]">
           ยิ่งกรอกหลายงวดยิ่งแม่น — 12 งวดขึ้นไปจะแยกวิธีคิดได้ชัด
           ใส่แค่ดอกเบี้ยหรือแค่ยอดคงเหลือก็ได้
         </p>
@@ -244,7 +244,7 @@ export function ReconcilePage({
         </div>
 
         {error && (
-          <p className="mt-3 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-[var(--text-meta)] text-[var(--color-warn)]">
+          <p className="mt-3 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
             {error}
           </p>
         )}
@@ -262,21 +262,21 @@ export function ReconcilePage({
         <>
           {/* ---------- ขั้น 1 ---------- */}
           <section className="mt-8">
-            <h2 className="text-[var(--text-row)]">ขั้นที่ 1 — วันตัดยอด</h2>
-            <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+            <h2 className="text-row">ขั้นที่ 1 — วันตัดยอด</h2>
+            <p className="mt-1 text-meta text-[var(--color-ink-2)]">
               เทียบวันที่ตรงตัว ไม่ใช่ fit ตัวเลข — วันที่ที่ธนาคารแจ้งมาคือความจริงอยู่แล้ว
             </p>
 
-            <p className="mt-3 text-[var(--text-lead)]">
+            <p className="mt-3 text-lead">
               {ROLL_LABEL[analysis.dateRule.best.dateRoll]} ·{' '}
               {CAL_LABEL[analysis.dateRule.best.rollCalendar]}
             </p>
-            <p className="text-[var(--text-meta)] text-[var(--color-ink-2)]">
+            <p className="text-meta text-[var(--color-ink-2)]">
               ตรง {analysis.dateRule.matched} จาก {analysis.dateRule.total} งวด
             </p>
 
             {analysis.dateRule.unmatchedDates.length > 0 && (
-              <p className="mt-2 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-[var(--text-meta)] text-[var(--color-warn)]">
+              <p className="mt-2 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
                 ไม่มีกฎไหนอธิบาย {analysis.dateRule.unmatchedDates.length} งวดนี้ได้:{' '}
                 {analysis.dateRule.unmatchedDates.map((d) => formatThaiDate(d)).join(', ')} —
                 น่าจะเป็นวันหยุดพิเศษที่ประกาศกะทันหัน ใส่ไว้ในปฏิทินวันหยุดด้านล่าง
@@ -287,13 +287,13 @@ export function ReconcilePage({
 
           {/* ---------- ขั้น 2 ---------- */}
           <section className="mt-8">
-            <h2 className="text-[var(--text-row)]">ขั้นที่ 2 — วิธีคิดจำนวนเงิน</h2>
-            <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+            <h2 className="text-row">ขั้นที่ 2 — วิธีคิดจำนวนเงิน</h2>
+            <p className="mt-1 text-meta text-[var(--color-ink-2)]">
               ตรึงวันตัดจากขั้นที่ 1 แล้วลอง 24 แบบ หาแบบที่คลาดเคลื่อนน้อยที่สุด
             </p>
 
             {analysis.tied.length > 1 && (
-              <p className="mt-3 rounded-md bg-[var(--color-interest-tint)] px-3 py-2 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+              <p className="mt-3 rounded-md bg-[var(--color-interest-tint)] px-3 py-2 text-meta text-[var(--color-ink-2)]">
                 มี {analysis.tied.length} แบบที่ให้ผลต่างกันไม่ถึง 1 บาท —
                 ข้อมูลเท่าที่มีแยกไม่ออก เลือกแบบไหนก็ได้ผลเหมือนกันในทางปฏิบัติ
                 กรอกใบแจ้งยอดเพิ่มถ้าอยากรู้ให้แน่
@@ -312,7 +312,7 @@ export function ReconcilePage({
                       {ROUNDING_LABEL[r.candidate.rounding]}
                       {r.candidate.capitaliseUnpaidInterest && ' · ทบดอกค้างเข้าต้น'}
                     </span>
-                    <span className="block text-[var(--text-meta)] text-[var(--color-ink-2)]">
+                    <span className="block text-meta text-[var(--color-ink-2)]">
                       คลาดเคลื่อนเฉลี่ย {(r.maeSatang / 100).toFixed(2)} บาทต่องวด ·{' '}
                       <span className={ZONE_STYLE[r.worstZone]}>
                         งวดที่แย่ที่สุด {ZONE_TEXT[r.worstZone]}
@@ -322,7 +322,7 @@ export function ReconcilePage({
                   <button
                     onClick={() => void apply(r)}
                     disabled={busy}
-                    className="tap shrink-0 rounded-md border border-[var(--color-interest)] px-3 py-2 text-[var(--text-meta)] text-[var(--color-interest)] disabled:opacity-50"
+                    className="tap shrink-0 rounded-md border border-[var(--color-interest)] px-3 py-2 text-meta text-[var(--color-interest)] disabled:opacity-50"
                   >
                     ใช้แบบนี้
                   </button>
@@ -331,7 +331,7 @@ export function ReconcilePage({
             </ul>
 
             {note && (
-              <p className="mt-3 rounded-md bg-[var(--color-ok)]/10 px-3 py-2 text-[var(--text-meta)] text-[var(--color-ok)]">
+              <p className="mt-3 rounded-md bg-[var(--color-ok)]/10 px-3 py-2 text-meta text-[var(--color-ok)]">
                 {note}
               </p>
             )}
@@ -340,7 +340,7 @@ export function ReconcilePage({
           {/* ---------- ผลเทียบรายงวด ---------- */}
           <section className="mt-8">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-[var(--text-row)]">เทียบรายงวดด้วยค่าที่ใช้อยู่ตอนนี้</h2>
+              <h2 className="text-row">เทียบรายงวดด้วยค่าที่ใช้อยู่ตอนนี้</h2>
               <button
                 onClick={() =>
                   downloadCsv(
@@ -348,14 +348,14 @@ export function ReconcilePage({
                     reconCsv(analysis.current),
                   )
                 }
-                className="tap text-[var(--text-meta)] text-[var(--color-interest)] hover:underline"
+                className="tap text-meta text-[var(--color-interest)] hover:underline"
               >
                 ส่งออก CSV
               </button>
             </div>
 
             {analysis.drift.detected && (
-              <p className="mt-2 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-[var(--text-meta)] text-[var(--color-warn)]">
+              <p className="mt-2 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
                 ⚠️ คลาดเคลื่อนไปทางเดียวกันติดกัน {analysis.drift.runLength} งวด (
                 {analysis.drift.direction === 'we_higher'
                   ? 'เราคิดมากกว่าธนาคาร'
@@ -373,11 +373,11 @@ export function ReconcilePage({
       {/* ---------- รายการใบแจ้งยอด ---------- */}
       {entries !== null && entries.length > 0 && (
         <section className="mt-8">
-          <h2 className="text-[var(--text-row)]">ใบแจ้งยอดที่กรอกไว้ ({entries.length})</h2>
+          <h2 className="text-row">ใบแจ้งยอดที่กรอกไว้ ({entries.length})</h2>
           <ul className="mt-2 divide-y divide-[var(--color-rule)]">
             {entries.map((e) => (
               <li key={e.stmtDate} className="flex items-center justify-between gap-4 py-2">
-                <span className="text-[var(--text-meta)]">
+                <span className="text-meta">
                   {formatThaiDate(e.stmtDate)}
                   {e.interestSatang !== undefined && ` · ดอก ${baht(e.interestSatang)}`}
                   {e.balanceSatang !== undefined && ` · เหลือ ${baht(e.balanceSatang)}`}
@@ -385,7 +385,7 @@ export function ReconcilePage({
                 <button
                   onClick={() => void removeEntry(e.stmtDate)}
                   disabled={busy}
-                  className="tap text-[var(--text-meta)] text-[var(--color-ink-3)] hover:text-[var(--color-warn)] disabled:opacity-50"
+                  className="tap text-meta text-[var(--color-ink-3)] hover:text-[var(--color-warn)] disabled:opacity-50"
                 >
                   ลบ
                 </button>
@@ -397,8 +397,8 @@ export function ReconcilePage({
 
       {/* ---------- ปฏิทินวันหยุดธนาคาร ---------- */}
       <section className="mt-8 rounded-lg border border-[var(--color-rule)] p-4">
-        <h2 className="text-[var(--text-row)]">ปฏิทินวันหยุดธนาคาร</h2>
-        <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+        <h2 className="text-row">ปฏิทินวันหยุดธนาคาร</h2>
+        <p className="mt-1 text-meta text-[var(--color-ink-2)]">
           กฎอัตโนมัติไม่มีวันครอบคลุมครบ วันหยุดพิเศษที่ ครม. ประกาศกะทันหันจะหลุดเสมอ —
           ใส่เองได้ แล้วเลือกปฏิทินแบบ &quot;เสาร์–อาทิตย์ + วันหยุดธนาคาร&quot;
         </p>
@@ -427,7 +427,7 @@ export function ReconcilePage({
         </div>
 
         {holidays.length > 0 && (
-          <p className="mt-3 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+          <p className="mt-3 text-meta text-[var(--color-ink-2)]">
             มีอยู่ {holidays.length} วัน · ล่าสุด{' '}
             {holidays
               .slice(-4)
@@ -443,7 +443,7 @@ export function ReconcilePage({
 function ReconTable({ results }: { results: readonly ReconResult[] }) {
   return (
     <div className="mt-3 overflow-x-auto">
-      <table className="w-full min-w-[620px] border-collapse text-[var(--text-meta)]">
+      <table className="w-full min-w-[620px] border-collapse text-meta">
         <thead>
           <tr className="border-b border-[var(--color-rule)] text-left">
             <th className="py-2 pr-4 font-medium text-[var(--color-ink-2)]">วันที่</th>
@@ -476,7 +476,7 @@ function ReconTable({ results }: { results: readonly ReconResult[] }) {
         </tbody>
       </table>
 
-      <p className="mt-2 text-[var(--text-micro)] text-[var(--color-ink-3)]">
+      <p className="mt-2 text-micro text-[var(--color-ink-3)]">
         Δ เป็นบวก = เราคำนวณได้มากกว่าที่ธนาคารแจ้ง · ต่างไม่เกิน 1 บาทถือว่าตรง
         (เป็นเรื่องปัดเศษ) · เกิน 50 บาทคือวิธีคิดต่างกันจริง
       </p>

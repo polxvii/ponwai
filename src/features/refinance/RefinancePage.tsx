@@ -73,8 +73,8 @@ export function RefinancePage() {
     <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
       <header className="mb-8 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div>
-          <h1 className="text-[var(--text-hero)]">รีไฟแนนซ์คุ้มไหม</h1>
-          <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+          <h1 className="text-hero">รีไฟแนนซ์คุ้มไหม</h1>
+          <p className="mt-1 text-meta text-[var(--color-ink-2)]">
             เทียบ 3 ทางพร้อมกันเสมอ — อยู่เฉย ๆ / ขอลดดอกกับธนาคารเดิม / ย้ายธนาคาร
           </p>
         </div>
@@ -95,7 +95,7 @@ export function RefinancePage() {
 
         <div className="min-w-0">
           {error && (
-            <p className="rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-[var(--text-meta)] text-[var(--color-warn)]">
+            <p className="rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
               {error}
             </p>
           )}
@@ -104,7 +104,7 @@ export function RefinancePage() {
           {outcomes.length === 0 && !error && (
             <div className="text-[var(--color-ink-2)]">
               <p>กรอกให้ครบแล้วผลลัพธ์จะขึ้นทันที ยังขาด</p>
-              <ul className="mt-2 space-y-1 text-[var(--text-meta)]">
+              <ul className="mt-2 space-y-1 text-meta">
                 {missing.map((m) => (
                   <li key={m}>· {m}</li>
                 ))}
@@ -121,7 +121,7 @@ export function RefinancePage() {
                   {warnings.map((w, i) => (
                     <li
                       key={i}
-                      className="rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-[var(--text-meta)] text-[var(--color-warn)]"
+                      className="rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]"
                     >
                       ⚠️ {w}
                     </li>
@@ -133,7 +133,7 @@ export function RefinancePage() {
 
               {/* ผู้ใช้กรอก 2 ทาง แล้วเห็น 4 แถว ต้องบอกว่าอีก 2 มาจากไหน ไม่ใช่ปล่อยให้เดา */}
               {outcomes.some((o) => o.autoAdded) && (
-                <p className="mt-3 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+                <p className="mt-3 text-meta text-[var(--color-ink-2)]">
                   แถวที่ติดป้าย &quot;แอพเติมให้&quot; ไม่ได้มาจากที่คุณกรอก —{' '}
                   <b className="font-medium">ไม่ทำอะไร</b> คือฐานเทียบที่ต้องมีเสมอ และ{' '}
                   <b className="font-medium">คงค่างวดเดิม</b> คือย้ายธนาคารแล้วจ่ายเท่าที่จ่ายอยู่
@@ -161,20 +161,20 @@ function Verdict({
 
   return (
     <section className="rounded-lg bg-[var(--color-panel)] p-5 text-[var(--color-panel-ink)]">
-      <p className="text-[var(--text-meta)] text-[var(--color-panel-ink-2)]">ทางที่ถูกที่สุด</p>
-      <h2 className="mt-1 text-[var(--text-lead)]">{best.label}</h2>
+      <p className="text-meta text-[var(--color-panel-ink-2)]">ทางที่ถูกที่สุด</p>
+      <h2 className="mt-1 text-lead">{best.label}</h2>
 
       {best.kind === 'stay' ? (
-        <p className="mt-3 text-[var(--text-meta)] text-[var(--color-panel-ink-2)]">
+        <p className="mt-3 text-meta text-[var(--color-panel-ink-2)]">
           ยังไม่มีข้อเสนอไหนคุ้มกว่าการอยู่เฉย ๆ
         </p>
       ) : (
-        <p className="mt-3 num text-[var(--text-figure)] text-[var(--color-principal-dark)]">
+        <p className="mt-3 num text-figure text-[var(--color-principal-dark)]">
           ประหยัดดอกเบี้ย {bahtRounded(best.interestSavedVsStayFixed)} บาท
         </p>
       )}
 
-      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 text-[var(--text-meta)]">
+      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 text-meta">
         <PanelRow k="ดอกเบี้ยที่เหลือจ่าย" v={bahtRounded(best.futureInterestFixed)} />
         <PanelRow k="ต้นทุนการย้าย" v={baht(best.movingCostSatang, 0)} />
         <PanelRow k="ผ่อนอีก" v={formatDuration(best.remainingPeriods)} />
@@ -212,10 +212,10 @@ function OutcomeTable({
 }) {
   return (
     <div className="mt-6 overflow-x-auto">
-      <table className="w-full min-w-[680px] border-collapse text-[var(--text-row)]">
+      <table className="w-full min-w-[680px] border-collapse text-row">
         <thead>
           <tr className="border-b border-[var(--color-rule)] text-left">
-            <th className="py-3 pr-4 text-[var(--text-meta)] font-medium text-[var(--color-ink-2)]">
+            <th className="py-3 pr-4 text-meta font-medium text-[var(--color-ink-2)]">
               ทางเลือก
             </th>
             <Th>ค่างวด</Th>
@@ -239,13 +239,13 @@ function OutcomeTable({
                 <td className="py-3 pr-4">
                   <span className={isBest ? 'font-medium' : ''}>{o.label}</span>
                   {isBest && (
-                    <span className="ml-2 rounded-sm bg-[var(--color-principal-tint)] px-1.5 py-0.5 text-[var(--text-micro)] text-[var(--color-principal-text)]">
+                    <span className="ml-2 rounded-sm bg-[var(--color-principal-tint)] px-1.5 py-0.5 text-micro text-[var(--color-principal-text)]">
                       ถูกที่สุด
                     </span>
                   )}
                   {o.autoAdded && (
                     <span
-                      className="ml-2 rounded-sm border border-[var(--color-rule)] px-1.5 py-0.5 text-[var(--text-micro)] text-[var(--color-ink-3)]"
+                      className="ml-2 rounded-sm border border-[var(--color-rule)] px-1.5 py-0.5 text-micro text-[var(--color-ink-3)]"
                       title={
                         o.kind === 'stay'
                           ? 'ฐานเทียบที่ต้องมีเสมอ ถ้าไม่มีก็บอกไม่ได้ว่าการย้ายคุ้มจริงไหม'
@@ -256,7 +256,7 @@ function OutcomeTable({
                     </span>
                   )}
                   {!o.feasible && (
-                    <span className="ml-2 rounded-sm bg-[var(--color-warn)]/12 px-1.5 py-0.5 text-[var(--text-micro)] text-[var(--color-warn)]">
+                    <span className="ml-2 rounded-sm bg-[var(--color-warn)]/12 px-1.5 py-0.5 text-micro text-[var(--color-warn)]">
                       จ่ายไม่ไหว
                     </span>
                   )}
@@ -290,7 +290,7 @@ function OutcomeTable({
                     </Td>
                   </>
                 ) : (
-                  <td colSpan={5} className="py-3 pr-4 text-[var(--text-meta)] text-[var(--color-warn)]">
+                  <td colSpan={5} className="py-3 pr-4 text-meta text-[var(--color-warn)]">
                     {o.infeasibleReason} · ต้องจ่ายอย่างน้อย {baht(o.minInstallmentSatang, 0)} บาท
                   </td>
                 )}
@@ -306,7 +306,7 @@ function OutcomeTable({
 function Th({ children, title }: { children: React.ReactNode; title?: string }) {
   return (
     <th
-      className="py-3 pr-4 text-right text-[var(--text-meta)] font-medium text-[var(--color-ink-2)]"
+      className="py-3 pr-4 text-right text-meta font-medium text-[var(--color-ink-2)]"
       title={title}
     >
       {children}
@@ -333,7 +333,7 @@ function CurrentLoanForm({
 }) {
   return (
     <section>
-      <h2 className="mb-3 text-[var(--text-row)]">หนี้ที่ผ่อนอยู่</h2>
+      <h2 className="mb-3 text-row">หนี้ที่ผ่อนอยู่</h2>
       <div className="grid grid-cols-2 gap-3">
         <Field label="ยอดคงเหลือวันนี้" suffix="บาท">
           <NumberField value={c.balance} onChange={(v) => onChange({ balance: v })} />
@@ -428,7 +428,7 @@ function RetentionForm({
 
           {/* ต้องบอก ไม่งั้นผู้ใช้เปิดสวิตช์ไว้แล้วงงว่าทำไมตารางมีแค่ 2 ทาง */}
           {!retentionUsable(r) && (
-            <p className="mt-3 text-[var(--text-meta)] text-[var(--color-ink-3)]">
+            <p className="mt-3 text-meta text-[var(--color-ink-3)]">
               ยังไม่เอาทางนี้ไปเทียบ เพราะต้องมีทั้งเรตโปรอย่างน้อย 1 ปี และเรตหลังพ้นโปร
             </p>
           )}
@@ -511,7 +511,7 @@ function RefiForm({
       </div>
 
       <details className="mt-3" open>
-        <summary className="tap cursor-pointer text-[var(--text-meta)] text-[var(--color-ink-2)]">
+        <summary className="tap cursor-pointer text-meta text-[var(--color-ink-2)]">
           ต้นทุนการย้าย รวมแล้ว {baht(movingCost, 0)} บาท
         </summary>
         <div className="mt-3 space-y-3">

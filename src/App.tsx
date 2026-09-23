@@ -65,10 +65,10 @@ function Shell() {
                 }`}
               >
                 {/* จอแคบใช้ขนาดเล็กลง ไม่งั้น 3 แท็บ + ปุ่มบัญชี ล้นจนป้ายถูกตัดกลางคำ */}
-                <span className="block text-[var(--text-meta)] sm:text-[var(--text-row)]">
+                <span className="block text-meta sm:text-row">
                   {t.label}
                 </span>
-                <span className="hidden text-[var(--text-micro)] text-[var(--color-ink-3)] sm:block">
+                <span className="hidden text-micro text-[var(--color-ink-3)] sm:block">
                   {t.hint}
                 </span>
               </button>
@@ -99,7 +99,7 @@ function AccountButton({ onSignIn }: { onSignIn: () => void }) {
     return (
       <button
         onClick={onSignIn}
-        className="tap ml-auto shrink-0 py-3 text-[var(--text-meta)] whitespace-nowrap text-[var(--color-interest)] hover:underline"
+        className="tap ml-auto shrink-0 py-3 text-meta whitespace-nowrap text-[var(--color-interest)] hover:underline"
       >
         เข้าสู่ระบบ
       </button>
@@ -107,7 +107,7 @@ function AccountButton({ onSignIn }: { onSignIn: () => void }) {
   }
 
   return (
-    <span className="ml-auto flex shrink-0 items-center gap-3 py-3 text-[var(--text-meta)]">
+    <span className="ml-auto flex shrink-0 items-center gap-3 py-3 text-meta">
       {/* อีเมลยาวกินที่ทั้งแถบ จอแคบซ่อนไว้ใน title ของปุ่มออกแทน */}
       <span
         className="hidden max-w-[180px] truncate text-[var(--color-ink-2)] md:inline"

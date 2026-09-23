@@ -44,8 +44,8 @@ export function InterestCurveChart({ outcomes: all }: { outcomes: readonly Refin
 
   return (
     <figure className="mt-8">
-      <figcaption className="mb-1 text-[var(--text-row)]">ดอกเบี้ยสะสม + ต้นทุนการย้าย</figcaption>
-      <p className="mb-4 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+      <figcaption className="mb-1 text-row">ดอกเบี้ยสะสม + ต้นทุนการย้าย</figcaption>
+      <p className="mb-4 text-meta text-[var(--color-ink-2)]">
         เส้นเริ่มจากต้นทุนการย้าย ไม่ใช่ศูนย์ — จุดที่เส้นตัดกับ &quot;ไม่ทำอะไร&quot; คือเดือนคืนทุน
         {hidden > 0 && ` (ซ่อน ${hidden} ทางที่จ่ายไม่ไหว)`}
       </p>

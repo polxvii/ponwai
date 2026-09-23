@@ -57,8 +57,8 @@ export function CostCurveChart({
 
   return (
     <figure className="mt-8">
-      <figcaption className="mb-1 text-[var(--text-row)]">ต้นทุนสะสมตามเวลา</figcaption>
-      <p className="mb-4 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+      <figcaption className="mb-1 text-row">ต้นทุนสะสมตามเวลา</figcaption>
+      <p className="mb-4 text-meta text-[var(--color-ink-2)]">
         ดอกเบี้ยสะสม + ค่าธรรมเนียมที่จ่ายสด — จุดที่เส้นตัดกันคือเดือนที่อันดับพลิก
       </p>
 
@@ -134,13 +134,13 @@ export function SensitivityBand({
 
   return (
     <section className="mt-8">
-      <h3 className="text-[var(--text-row)]">ถ้า MRR ขยับ</h3>
-      <p className="mt-1 mb-3 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+      <h3 className="text-row">ถ้า MRR ขยับ</h3>
+      <p className="mt-1 mb-3 text-meta text-[var(--color-ink-2)]">
         ทุก metric ที่มีช่วงลอยตัวควรอ่านเป็นแถบ ไม่ใช่จุดเดียว
       </p>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[420px] border-collapse text-[var(--text-meta)]">
+        <table className="w-full min-w-[420px] border-collapse text-meta">
           <thead>
             <tr className="border-b border-[var(--color-rule)]">
               <th className="py-2 pr-4 text-left font-medium text-[var(--color-ink-2)]">MRR</th>
@@ -167,7 +167,7 @@ export function SensitivityBand({
       </div>
 
       {flips.length > 0 && (
-        <p className="mt-3 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-[var(--text-meta)] text-[var(--color-warn)]">
+        <p className="mt-3 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
           ⚠️ อันดับพลิก:{' '}
           {flips.map((f, i) => (
             <span key={i}>

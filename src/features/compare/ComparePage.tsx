@@ -118,8 +118,8 @@ export function ComparePage() {
     <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
       <header className="mb-8 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div>
-          <h1 className="text-[var(--text-hero)]">เปรียบเทียบข้อเสนอ</h1>
-          <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+          <h1 className="text-hero">เปรียบเทียบข้อเสนอ</h1>
+          <p className="mt-1 text-meta text-[var(--color-ink-2)]">
             จ่ายเท่ากันทุกธนาคาร แล้วดูว่าใครทำให้หนี้เหลือน้อยกว่า
           </p>
         </div>
@@ -131,7 +131,7 @@ export function ComparePage() {
         {/* min-w-0 จำเป็น: grid item ตั้งต้นเป็น min-width:auto ลูกที่กว้างจะดันคอลัมน์จนหน้าเลื่อนได้ */}
         <div className="min-w-0 space-y-6">
           <section>
-            <h2 className="mb-3 text-[var(--text-row)]">เงื่อนไขร่วม</h2>
+            <h2 className="mb-3 text-row">เงื่อนไขร่วม</h2>
             <div className="grid grid-cols-2 gap-3">
               <Field label="วงเงินกู้" suffix="บาท">
                 <NumberField
@@ -190,7 +190,7 @@ export function ComparePage() {
               + เพิ่มธนาคาร
             </button>
           ) : (
-            <p className="text-center text-[var(--text-meta)] text-[var(--color-ink-3)]">
+            <p className="text-center text-meta text-[var(--color-ink-3)]">
               เทียบพร้อมกันได้สูงสุด {MAX_OFFERS} ธนาคาร
             </p>
           )}
@@ -199,7 +199,7 @@ export function ComparePage() {
         {/* ---------- ฝั่งผลลัพธ์ ---------- */}
         <div className="min-w-0">
           {error && (
-            <p className="rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-[var(--text-meta)] text-[var(--color-warn)]">
+            <p className="rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
               {error}
             </p>
           )}
@@ -207,7 +207,7 @@ export function ComparePage() {
           {ranked.length === 0 && !error && (
             <div className="text-[var(--color-ink-2)]">
               <p>กรอกให้ครบแล้วผลลัพธ์จะขึ้นทันที ยังขาด</p>
-              <ul className="mt-2 space-y-1 text-[var(--text-meta)]">
+              <ul className="mt-2 space-y-1 text-meta">
                 {blocking.map((b) => (
                   <li key={b}>· {b}</li>
                 ))}
@@ -222,8 +222,8 @@ export function ComparePage() {
               {/* ให้ผลลัพธ์ตั้งแต่ยังกรอกไม่ครบ พร้อมบอกว่าที่ขาดกระทบเท่าไหร่ (ข้อ 5A.3) */}
               {missing.length > 0 && (
                 <aside className="mt-6 rounded-md border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4">
-                  <h3 className="text-[var(--text-meta)] font-medium">ยังกรอกไม่ครบ</h3>
-                  <ul className="mt-2 space-y-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+                  <h3 className="text-meta font-medium">ยังกรอกไม่ครบ</h3>
+                  <ul className="mt-2 space-y-1 text-meta text-[var(--color-ink-2)]">
                     {missing.slice(0, 5).map((m, i) => (
                       <li key={i}>
                         {m.bank} · {m.label} — {m.impact}
@@ -272,14 +272,14 @@ function OfferForm({
   return (
     <section className="rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[var(--text-micro)] text-[var(--color-ink-3)]">
+        <span className="text-micro text-[var(--color-ink-3)]">
           ข้อเสนอที่ {index + 1}
         </span>
         {onRemove && (
           <button
             onClick={onRemove}
             aria-label={`ลบข้อเสนอที่ ${index + 1}`}
-            className="tap text-[var(--text-meta)] text-[var(--color-ink-3)] hover:text-[var(--color-warn)]"
+            className="tap text-meta text-[var(--color-ink-3)] hover:text-[var(--color-warn)]"
           >
             ลบ
           </button>
@@ -333,7 +333,7 @@ function OfferForm({
       </div>
 
       <details className="mt-3">
-        <summary className="tap cursor-pointer text-[var(--text-meta)] text-[var(--color-ink-2)]">
+        <summary className="tap cursor-pointer text-meta text-[var(--color-ink-2)]">
           ค่าธรรมเนียมและประกัน
         </summary>
         <div className="mt-3 space-y-3">

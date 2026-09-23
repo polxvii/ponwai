@@ -34,13 +34,13 @@ export function ResultsTable({
       </div>
 
       <div className="hidden lg:block">
-        <table className="w-full border-collapse text-[var(--text-row)]">
+        <table className="w-full border-collapse text-row">
           <thead>
             <tr className="border-b border-[var(--color-rule)] text-left">
-              <th className="py-3 pr-4 font-medium text-[var(--text-meta)] text-[var(--color-ink-2)]">
+              <th className="py-3 pr-4 font-medium text-meta text-[var(--color-ink-2)]">
                 อันดับ
               </th>
-              <th className="py-3 pr-4 font-medium text-[var(--text-meta)] text-[var(--color-ink-2)]">
+              <th className="py-3 pr-4 font-medium text-meta text-[var(--color-ink-2)]">
                 ธนาคาร
               </th>
               <Th title={`เงินต้นคงเหลือ + เงินสดที่จ่ายจริง ณ เดือนที่ ${horizonMonths}`}>
@@ -65,12 +65,12 @@ export function ResultsTable({
                 <td className="py-3 pr-4">
                   <span className="font-medium">{nameOf(r.bankCode)}</span>
                   {r.rank === 1 && r.feasible && (
-                    <span className="ml-2 rounded-sm bg-[var(--color-principal-tint)] px-1.5 py-0.5 text-[var(--text-micro)] text-[var(--color-principal-text)]">
+                    <span className="ml-2 rounded-sm bg-[var(--color-principal-tint)] px-1.5 py-0.5 text-micro text-[var(--color-principal-text)]">
                       ถูกที่สุด
                     </span>
                   )}
                   {!r.feasible && (
-                    <span className="ml-2 rounded-sm bg-[var(--color-warn)]/12 px-1.5 py-0.5 text-[var(--text-micro)] text-[var(--color-warn)]">
+                    <span className="ml-2 rounded-sm bg-[var(--color-warn)]/12 px-1.5 py-0.5 text-micro text-[var(--color-warn)]">
                       จ่ายไม่ไหว
                     </span>
                   )}
@@ -87,7 +87,7 @@ export function ResultsTable({
         </table>
 
         {ranked.some((r) => !r.feasible) && (
-          <p className="mt-3 text-[var(--text-meta)] text-[var(--color-warn)]">
+          <p className="mt-3 text-meta text-[var(--color-warn)]">
             {ranked.filter((r) => !r.feasible).map((r) => (
               <span key={r.bankCode} className="block">
                 {nameOf(r.bankCode)}: {r.infeasibleReason}
@@ -103,7 +103,7 @@ export function ResultsTable({
 function Th({ children, title }: { children: React.ReactNode; title?: string }) {
   return (
     <th
-      className="py-3 pr-4 text-right font-medium text-[var(--text-meta)] text-[var(--color-ink-2)]"
+      className="py-3 pr-4 text-right font-medium text-meta text-[var(--color-ink-2)]"
       title={title}
     >
       {children}
@@ -141,23 +141,23 @@ function OfferCardMobile({
       } ${!r.feasible ? 'opacity-70' : ''}`}
     >
       <header className="flex items-baseline justify-between">
-        <h3 className="text-[var(--text-lead)]">
+        <h3 className="text-lead">
           {r.feasible && <span className="num mr-2 text-[var(--color-ink-3)]">{r.rank}</span>}
           {nameOf(r.bankCode)}
         </h3>
         {r.rank === 1 && r.feasible && (
-          <span className="text-[var(--text-meta)] text-[var(--color-principal-text)]">
+          <span className="text-meta text-[var(--color-principal-text)]">
             ถูกที่สุด
           </span>
         )}
       </header>
 
       {!r.feasible ? (
-        <p className="mt-2 text-[var(--text-meta)] text-[var(--color-warn)]">{r.infeasibleReason}</p>
+        <p className="mt-2 text-meta text-[var(--color-warn)]">{r.infeasibleReason}</p>
       ) : (
         <>
-          <p className="mt-3 num text-[var(--text-figure)]">{bahtRounded(r.netPositionFixed)}</p>
-          <p className="text-[var(--text-meta)] text-[var(--color-ink-2)]">
+          <p className="mt-3 num text-figure">{bahtRounded(r.netPositionFixed)}</p>
+          <p className="text-meta text-[var(--color-ink-2)]">
             Net Position ณ เดือนที่ {horizonMonths}
             {gap !== null && gap > 0n && (
               <span className="text-[var(--color-warn)]"> · แพงกว่าอันดับ 1 {bahtRounded(gap)}</span>
@@ -171,7 +171,7 @@ function OfferCardMobile({
             height={8}
           />
 
-          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[var(--text-meta)]">
+          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-meta">
             <Row k={`ดอกเบี้ย ${horizonMonths} งวด`} v={bahtRounded(r.interestPaidToHorizonFixed)} />
             <Row k="เงินต้นคงเหลือ" v={bahtRounded(r.balanceAtHorizonFixed)} />
             <Row k="EIR" v={r.eirBps === null ? '—' : pct(r.eirBps)} />

@@ -96,22 +96,22 @@ export function LoanDetail({
   return (
     <Wrapper onBack={onBack}>
       <header className="mb-6">
-        <h1 className="text-[var(--text-hero)]">{item.propertyName}</h1>
-        <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+        <h1 className="text-hero">{item.propertyName}</h1>
+        <p className="mt-1 text-meta text-[var(--color-ink-2)]">
           {item.bankLabel} · ทำสัญญา {formatThaiDate(item.contractDate, 'long')} ·{' '}
           {formatDuration(item.termMonths)}
         </p>
       </header>
 
       {full.conventionAssumed && (
-        <p className="mb-4 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-[var(--text-meta)] text-[var(--color-warn)]">
+        <p className="mb-4 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
           ⚠️ วิธีนับวันและการปัดเศษยังเป็นค่าสมมติ ตัวเลขอาจต่างจากใบแจ้งยอดเล็กน้อย —
           เอาใบแจ้งยอด 1 ใบมาเทียบแล้วยืนยันได้
         </p>
       )}
 
       {actual.totalCapitalisedFixed > 0n && (
-        <p className="mb-4 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-[var(--text-meta)] text-[var(--color-warn)]">
+        <p className="mb-4 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
           ⚠️ มีงวดที่จ่ายไม่พอดอกเบี้ย ดอกที่เหลือถูกทบเข้าเงินต้นรวม{' '}
           {bahtRounded(actual.totalCapitalisedFixed)} บาท
         </p>
@@ -119,8 +119,8 @@ export function LoanDetail({
 
       {/* ---------- สรุป ---------- */}
       <section className="rounded-lg bg-[var(--color-panel)] p-5 text-[var(--color-panel-ink)]">
-        <p className="text-[var(--text-meta)] text-[var(--color-panel-ink-2)]">ยอดคงเหลือวันนี้</p>
-        <p className="mt-1 num text-[var(--text-hero)]">{bahtRounded(balanceNow)}</p>
+        <p className="text-meta text-[var(--color-panel-ink-2)]">ยอดคงเหลือวันนี้</p>
+        <p className="mt-1 num text-hero">{bahtRounded(balanceNow)}</p>
 
         <SplitBar
           className="mt-4"
@@ -129,11 +129,11 @@ export function LoanDetail({
           height={10}
           onPanel
         />
-        <p className="mt-1 text-[var(--text-micro)] text-[var(--color-panel-ink-3)]">
+        <p className="mt-1 text-micro text-[var(--color-panel-ink-3)]">
           เป็นของเราแล้ว {bahtRounded(principalPaid)} · ยังเป็นหนี้ {bahtRounded(balanceNow)}
         </p>
 
-        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-1 text-[var(--text-meta)] sm:grid-cols-3">
+        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-1 text-meta sm:grid-cols-3">
           <PanelRow k="ผ่อนมาแล้ว" v={`${paidPeriods} งวด`} />
           <PanelRow k="ดอกเบี้ยที่จ่ายไป" v={bahtRounded(interestPaid)} />
           <PanelRow k="ค่างวดตามสัญญา" v={baht(item.installmentSatang, 0)} />
@@ -205,7 +205,7 @@ export function LoanDetail({
       {/* ---------- สรุปรายปี ---------- */}
       <section className="mt-8">
         <div className="mb-3 flex items-end justify-between gap-4">
-          <h2 className="text-[var(--text-row)]">สรุปรายปี</h2>
+          <h2 className="text-row">สรุปรายปี</h2>
           <div className="w-[220px]">
             <Field label="นับปีแบบ">
               <SelectField
@@ -224,8 +224,8 @@ export function LoanDetail({
 
       {/* ---------- ตารางผ่อน ---------- */}
       <section className="mt-8">
-        <h2 className="mb-1 text-[var(--text-row)]">ตารางผ่อน</h2>
-        <p className="mb-3 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+        <h2 className="mb-1 text-row">ตารางผ่อน</h2>
+        <p className="mb-3 text-meta text-[var(--color-ink-2)]">
           ถ้าตัวเลขไม่ตรงใบแจ้งยอด ให้ดู &quot;ช่วงคิดดอก&quot; กับ &quot;วัน&quot; ก่อน —
           ปัญหาเกือบทั้งหมดมาจากวันที่ ไม่ใช่สูตร
         </p>
@@ -240,7 +240,7 @@ function Wrapper({ children, onBack }: { children: React.ReactNode; onBack: () =
     <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
       <button
         onClick={onBack}
-        className="tap mb-4 text-[var(--text-meta)] text-[var(--color-interest)] hover:underline"
+        className="tap mb-4 text-meta text-[var(--color-interest)] hover:underline"
       >
         ← กลับไปรายการสัญญา
       </button>
@@ -314,10 +314,10 @@ function PaymentSection({ full, onChanged }: { full: LoanFull; onChanged: () => 
   return (
     <section className="mt-8">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-[var(--text-row)]">การจ่ายที่บันทึกไว้ ({full.payments.length})</h2>
+        <h2 className="text-row">การจ่ายที่บันทึกไว้ ({full.payments.length})</h2>
         <button
           onClick={() => setOpen(!open)}
-          className="tap text-[var(--text-meta)] text-[var(--color-interest)] hover:underline"
+          className="tap text-meta text-[var(--color-interest)] hover:underline"
         >
           {open ? 'ปิด' : '+ บันทึกการจ่าย'}
         </button>
@@ -341,7 +341,7 @@ function PaymentSection({ full, onChanged }: { full: LoanFull; onChanged: () => 
           </div>
 
           {error && (
-            <p className="mt-3 text-[var(--text-meta)] text-[var(--color-warn)]">{error}</p>
+            <p className="mt-3 text-meta text-[var(--color-warn)]">{error}</p>
           )}
 
           <button
@@ -355,7 +355,7 @@ function PaymentSection({ full, onChanged }: { full: LoanFull; onChanged: () => 
       )}
 
       {full.payments.length === 0 ? (
-        <p className="text-[var(--text-meta)] text-[var(--color-ink-2)]">
+        <p className="text-meta text-[var(--color-ink-2)]">
           ยังไม่มีการจ่ายที่บันทึกไว้ — ตารางด้านล่างคิดจากค่างวดตามสัญญา
           พอบันทึกการจ่ายจริงแล้วตารางจะปรับตาม
         </p>
@@ -363,7 +363,7 @@ function PaymentSection({ full, onChanged }: { full: LoanFull; onChanged: () => 
         <ul className="divide-y divide-[var(--color-rule)]">
           {full.payments.map((p) => (
             <li key={p.id} className="flex items-center justify-between gap-4 py-2">
-              <span className="text-[var(--text-meta)]">
+              <span className="text-meta">
                 {formatThaiDate(p.paidDate)} ·{' '}
                 {KIND_LABELS.find((k) => k.value === p.kind)?.label ?? p.kind}
                 {p.note && <span className="text-[var(--color-ink-3)]"> · {p.note}</span>}
@@ -374,7 +374,7 @@ function PaymentSection({ full, onChanged }: { full: LoanFull; onChanged: () => 
                 <button
                   onClick={() => void drop(p.id)}
                   disabled={busy}
-                  className="tap text-[var(--text-meta)] text-[var(--color-ink-3)] hover:text-[var(--color-warn)]"
+                  className="tap text-meta text-[var(--color-ink-3)] hover:text-[var(--color-warn)]"
                 >
                   ลบ
                 </button>
@@ -394,10 +394,10 @@ function YearTable({ rows, axis }: { rows: readonly ScheduleRow[]; axis: GroupAx
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[560px] border-collapse text-[var(--text-row)]">
+      <table className="w-full min-w-[560px] border-collapse text-row">
         <thead>
           <tr className="border-b border-[var(--color-rule)] text-left">
-            <th className="py-2 pr-4 text-[var(--text-meta)] font-medium text-[var(--color-ink-2)]">
+            <th className="py-2 pr-4 text-meta font-medium text-[var(--color-ink-2)]">
               ปี
             </th>
             <ThRight>งวด</ThRight>
@@ -417,13 +417,13 @@ function YearTable({ rows, axis }: { rows: readonly ScheduleRow[]; axis: GroupAx
                   {g.label}
                   {/* ปีแรกกับปีสุดท้ายมักไม่ครบ 12 งวด ถ้าไม่ติดป้ายจะเอาไปเทียบกับปีเต็มแล้วสรุปผิด */}
                   {g.isPartialYear && (
-                    <span className="ml-2 text-[var(--text-micro)] text-[var(--color-ink-3)]">
+                    <span className="ml-2 text-micro text-[var(--color-ink-3)]">
                       ไม่ครบปี
                     </span>
                   )}
                 </span>
                 {/* ปีสัญญาไม่ตรงปีปฏิทิน ถ้าไม่บอกเดือนต้องกางปฏิทินในหัวเอง */}
-                <span className="block text-[var(--text-micro)] whitespace-nowrap text-[var(--color-ink-3)]">
+                <span className="block text-micro whitespace-nowrap text-[var(--color-ink-3)]">
                   {formatMonthSpan(g.rows[0]!.date, g.rows[g.rows.length - 1]!.date)}
                 </span>
               </td>
@@ -462,7 +462,7 @@ function ScheduleTable({ rows, today }: { rows: readonly ScheduleRow[]; today: I
   return (
     <>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] border-collapse text-[var(--text-meta)]">
+        <table className="w-full min-w-[820px] border-collapse text-meta">
           {/* เรียงคอลัมน์ตามที่คนติดตามสินเชื่อใน Excel คุ้นเคย
               งวด → เดือน → อัตรา → ต้น → ดอก → ยอดชำระ → คงเหลือ
               คอลัมน์วันที่/จำนวนวันเป็นของไว้ไล่หาสาเหตุตอนกระทบยอด จึงย้ายไปท้าย */}
@@ -511,7 +511,7 @@ function ScheduleTable({ rows, today }: { rows: readonly ScheduleRow[]; today: I
                     </span>
                     {/* แยกให้ชัดว่าแถวไหนมาจากยอดที่บันทึกจริง แถวไหนเป็นประมาณการ */}
                     <span
-                      className={`ml-1 text-[var(--text-micro)] ${
+                      className={`ml-1 text-micro ${
                         isActual ? 'text-[var(--color-ok)]' : 'text-[var(--color-ink-3)]'
                       }`}
                       title={
@@ -526,7 +526,7 @@ function ScheduleTable({ rows, today }: { rows: readonly ScheduleRow[]; today: I
                   <TdRight>
                     {bahtRounded(r.balanceAfterFixed)}
                     {otherFlags.length > 0 && (
-                      <span className="ml-2 text-[var(--text-micro)] text-[var(--color-ink-3)]">
+                      <span className="ml-2 text-micro text-[var(--color-ink-3)]">
                         {otherFlags.map((f) => FLAG_LABELS[f] ?? f).join(' · ')}
                       </span>
                     )}
@@ -546,7 +546,7 @@ function ScheduleTable({ rows, today }: { rows: readonly ScheduleRow[]; today: I
       {rows.length > view.length && (
         <button
           onClick={() => setShowAll(true)}
-          className="tap mt-3 text-[var(--text-meta)] text-[var(--color-interest)] hover:underline"
+          className="tap mt-3 text-meta text-[var(--color-interest)] hover:underline"
         >
           ดูทั้งหมด {rows.length} งวด
         </button>
@@ -554,7 +554,7 @@ function ScheduleTable({ rows, today }: { rows: readonly ScheduleRow[]; today: I
       {showAll && (
         <button
           onClick={() => setShowAll(false)}
-          className="tap mt-3 text-[var(--text-meta)] text-[var(--color-interest)] hover:underline"
+          className="tap mt-3 text-meta text-[var(--color-interest)] hover:underline"
         >
           ย่อกลับ
         </button>

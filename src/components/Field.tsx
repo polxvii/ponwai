@@ -21,7 +21,7 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="block text-[var(--text-meta)] text-[var(--color-ink-2)]">{label}</span>
+      <span className="block text-meta text-[var(--color-ink-2)]">{label}</span>
       {/* suffix ลอยทับตัวเลขถ้าไม่กันที่ไว้ — กันด้วยตัวแปร CSS ที่ input รับช่วงไป
           ใช้ em เพื่อให้คำนวณจาก font-size ของ input เอง และเป็น utility ตัวเดียว
           ไม่ชนกับ pr- ค่าอื่นใน class list */}
@@ -35,13 +35,13 @@ export function Field({
       >
         {children}
         {suffix && (
-          <span className="pointer-events-none absolute right-3 text-[var(--text-meta)] text-[var(--color-ink-3)]">
+          <span className="pointer-events-none absolute right-3 text-meta text-[var(--color-ink-3)]">
             {suffix}
           </span>
         )}
       </span>
       {hint && (
-        <span className="mt-1 block text-[var(--text-micro)] text-[var(--color-ink-3)]">{hint}</span>
+        <span className="mt-1 block text-micro text-[var(--color-ink-3)]">{hint}</span>
       )}
     </label>
   )
@@ -137,9 +137,9 @@ export function Toggle({
         className="mt-1 size-5 shrink-0 accent-[var(--color-interest)]"
       />
       <span>
-        <span className="block text-[var(--text-row)]">{label}</span>
+        <span className="block text-row">{label}</span>
         {hint && (
-          <span className="block text-[var(--text-meta)] text-[var(--color-ink-2)]">{hint}</span>
+          <span className="block text-meta text-[var(--color-ink-2)]">{hint}</span>
         )}
       </span>
     </label>

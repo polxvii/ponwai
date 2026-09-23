@@ -10,8 +10,10 @@ import {
   applyUpdate, canInstall, captureInstallPrompt, isIosSafari, isStandalone, promptInstall,
   registerServiceWorker,
 } from '@/lib/pwa'
+import { PREFIX } from '@/lib/persist'
 
-const DISMISS_KEY = 'ponwai:v1:install-dismissed'
+// ใช้ PREFIX ร่วมกับที่อื่น เพื่อให้ถูกล้างพร้อมกันตอนขึ้นเวอร์ชัน storage
+const DISMISS_KEY = `${PREFIX}install-dismissed`
 
 export function AppBanners() {
   const [offline, setOffline] = useState(!navigator.onLine)
@@ -123,7 +125,7 @@ function Banner({ tone, children }: { tone: 'warn' | 'info'; children: React.Rea
   return (
     <div
       role="status"
-      className={`mx-auto flex w-full max-w-[560px] items-center gap-3 rounded-lg px-4 py-3 text-[var(--text-meta)] shadow-lg ${style}`}
+      className={`mx-auto flex w-full max-w-[560px] items-center gap-3 rounded-lg px-4 py-3 text-meta shadow-lg ${style}`}
     >
       {children}
     </div>

@@ -54,8 +54,8 @@ export function LoanForm({
 
   return (
     <div className="max-w-[640px]">
-      <h2 className="text-[var(--text-lead)]">บันทึกสัญญาที่ผ่อนอยู่</h2>
-      <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+      <h2 className="text-lead">บันทึกสัญญาที่ผ่อนอยู่</h2>
+      <p className="mt-1 text-meta text-[var(--color-ink-2)]">
         เอาเลขจากสัญญาเงินกู้กับใบแจ้งยอดล่าสุดมากรอก ส่วนที่ไม่รู้ข้ามได้ แก้ทีหลังได้
       </p>
 
@@ -88,7 +88,7 @@ export function LoanForm({
       </section>
 
       <section className="mt-6">
-        <h3 className="mb-3 text-[var(--text-row)]">วันที่</h3>
+        <h3 className="mb-3 text-row">วันที่</h3>
         <div className="grid grid-cols-2 gap-3">
           <Field label="วันทำสัญญา" hint={formatThaiDate(d.contractDate, 'long')}>
             <DateField value={d.contractDate} onChange={(v) => set({ contractDate: isoDate(v) })} />
@@ -116,7 +116,7 @@ export function LoanForm({
       </section>
 
       <section className="mt-6">
-        <h3 className="mb-3 text-[var(--text-row)]">วงเงินและค่างวด</h3>
+        <h3 className="mb-3 text-row">วงเงินและค่างวด</h3>
         <div className="grid grid-cols-2 gap-3">
           <Field label="วงเงินที่เบิกจริง" suffix="บาท" hint="ยอดที่ได้รับจริง รวมเบี้ยที่รวมในวงเงินแล้ว">
             <NumberField value={d.disbursed} onChange={(v) => set({ disbursed: v })} />
@@ -145,7 +145,7 @@ export function LoanForm({
       </section>
 
       <section className="mt-6">
-        <h3 className="mb-3 text-[var(--text-row)]">อัตราดอกเบี้ย</h3>
+        <h3 className="mb-3 text-row">อัตราดอกเบี้ย</h3>
         <div className="grid grid-cols-3 gap-2">
           {d.promoRates.map((r, i) => (
             <Field key={i} label={`ปีที่ ${i + 1}`} suffix="%">
@@ -166,14 +166,14 @@ export function LoanForm({
 
       {/* ส่วนที่ไม่มีใครรู้จนกว่าจะเทียบใบแจ้งยอด — ซ่อนไว้แต่ต้องแก้ได้ (ข้อ 9.1) */}
       <details className="mt-6 rounded-lg border border-[var(--color-rule)] p-4">
-        <summary className="tap cursor-pointer text-[var(--text-row)]">
+        <summary className="tap cursor-pointer text-row">
           วิธีคิดดอกเบี้ยของธนาคาร
-          <span className="ml-2 text-[var(--text-meta)] text-[var(--color-ink-3)]">
+          <span className="ml-2 text-meta text-[var(--color-ink-3)]">
             ค่าตั้งต้นเป็นแบบที่พบบ่อยสุด
           </span>
         </summary>
 
-        <p className="mt-3 rounded-md bg-[var(--color-interest-tint)] px-3 py-2 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+        <p className="mt-3 rounded-md bg-[var(--color-interest-tint)] px-3 py-2 text-meta text-[var(--color-ink-2)]">
           ทั้ง 3 ข้อนี้ไม่มีเขียนในสัญญา รู้ได้จากการเทียบกับใบแจ้งยอดจริงเท่านั้น
           ระบบจะบันทึกไว้ว่าเป็นค่าสมมติ จนกว่าคุณจะยืนยันด้วยยอดจริง
         </p>
@@ -219,7 +219,7 @@ export function LoanForm({
       </details>
 
       {showErrors && errors.length > 0 && (
-        <ul className="mt-4 space-y-1 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-[var(--text-meta)] text-[var(--color-warn)]">
+        <ul className="mt-4 space-y-1 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
           {errors.map((e, i) => (
             <li key={i}>{e}</li>
           ))}
@@ -227,7 +227,7 @@ export function LoanForm({
       )}
 
       {error && (
-        <p className="mt-4 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-[var(--text-meta)] text-[var(--color-warn)]">
+        <p className="mt-4 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
           บันทึกไม่สำเร็จ — {error}
         </p>
       )}

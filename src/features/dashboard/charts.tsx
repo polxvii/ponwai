@@ -83,8 +83,8 @@ export function BalanceChart({
 
   return (
     <figure className="mt-8">
-      <figcaption className="mb-1 text-[var(--text-row)]">ยอดหนี้ตามเวลา</figcaption>
-      <p className="mb-4 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+      <figcaption className="mb-1 text-row">ยอดหนี้ตามเวลา</figcaption>
+      <p className="mb-4 text-meta text-[var(--color-ink-2)]">
         {samePlan
           ? 'ยังไม่มีการโปะ เส้นเดียวคือแผนตามสัญญา'
           : 'ช่องว่างระหว่างสองเส้นคือผลของการโปะ — ยิ่งห่างยิ่งประหยัด'}
@@ -249,8 +249,8 @@ export function YearBarsChart({
 
   return (
     <figure className="mt-8">
-      <figcaption className="mb-1 text-[var(--text-row)]">จ่ายไปปีละเท่าไหร่ แยกดอก/ต้น</figcaption>
-      <p className="mb-4 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+      <figcaption className="mb-1 text-row">จ่ายไปปีละเท่าไหร่ แยกดอก/ต้น</figcaption>
+      <p className="mb-4 text-meta text-[var(--color-ink-2)]">
         ความสูงรวมคือเงินที่จ่ายทั้งปี ส่วนสีเข้มคือส่วนที่หายไปกับดอกเบี้ย
       </p>
 
@@ -315,8 +315,8 @@ export function TaxChart({
 
   return (
     <figure className="mt-8">
-      <figcaption className="mb-1 text-[var(--text-row)]">สิทธิลดหย่อนภาษีรายปี</figcaption>
-      <p className="mb-4 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+      <figcaption className="mb-1 text-row">สิทธิลดหย่อนภาษีรายปี</figcaption>
+      <p className="mb-4 text-meta text-[var(--color-ink-2)]">
         รวมทุกสัญญาแล้ว เพราะเพดาน {capBaht.toLocaleString('en-US')} เป็นของคนหนึ่งคนต่อปี
         ไม่ใช่ต่อสัญญา — ส่วนที่เกินเส้นใช้สิทธิไม่ได้
       </p>

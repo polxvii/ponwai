@@ -40,11 +40,15 @@ function register(onUpdate: () => void): void {
 
 export function applyUpdate(): void {
   void navigator.serviceWorker.getRegistration().then((reg) => {
+    // ไม่มีตัวรออยู่ = มันเข้าคุมไปแล้ว รีโหลดตรง ๆ พอ
+    // ⚠️ ถ้าไม่มีทางนี้ ปุ่มจะกดแล้วเงียบในเคสที่ SW activate ไปก่อนผู้ใช้กด
+    if (!reg?.waiting) return location.reload()
+
     // รอ SW ตัวใหม่เข้าคุมก่อนค่อยรีโหลด ไม่งั้นได้ของเก่าอีกรอบ
     navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), {
       once: true,
     })
-    reg?.waiting?.postMessage('skip-waiting')
+    reg.waiting.postMessage('skip-waiting')
   })
 }
 

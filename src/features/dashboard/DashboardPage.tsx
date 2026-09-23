@@ -154,16 +154,16 @@ export function DashboardPage({
       {computed.length > 1 && (
         <section className="mb-6 flex flex-wrap items-baseline gap-x-8 gap-y-2">
           <div>
-            <p className="text-[var(--text-meta)] text-[var(--color-ink-2)]">
+            <p className="text-meta text-[var(--color-ink-2)]">
               หนี้รวมทุกหลัง ({computed.length} สัญญา)
             </p>
-            <p className="num text-[var(--text-figure)]">{bahtRounded(totalDebt)}</p>
+            <p className="num text-figure">{bahtRounded(totalDebt)}</p>
           </div>
           <div>
-            <p className="text-[var(--text-meta)] text-[var(--color-ink-2)]">
+            <p className="text-meta text-[var(--color-ink-2)]">
               ดอกเบี้ยรวมปี {thisYear + 543}
             </p>
-            <p className="num text-[var(--text-figure)]">{bahtRounded(interestThisYear)}</p>
+            <p className="num text-figure">{bahtRounded(interestThisYear)}</p>
           </div>
         </section>
       )}
@@ -186,18 +186,18 @@ export function DashboardPage({
       {/* ---------- hero บนแผงหมึกเข้ม (ข้อ 5.4) ---------- */}
       <section className="rounded-lg bg-[var(--color-panel)] p-5 text-[var(--color-panel-ink)] sm:p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="text-[var(--text-meta)] text-[var(--color-panel-ink-2)]">
+          <p className="text-meta text-[var(--color-panel-ink-2)]">
             งวด {currentIndex} จาก {rows.length}
           </p>
-          <p className="text-[var(--text-meta)] text-[var(--color-panel-ink-2)]">
+          <p className="text-meta text-[var(--color-panel-ink-2)]">
             {nextRow
               ? `งวดถัดไป ${formatThaiDate(nextRow.date, 'long')}`
               : 'ปิดหนี้ครบแล้ว'}
           </p>
         </div>
 
-        <p className="mt-3 num text-[var(--text-hero)]">{bahtRounded(balance)}</p>
-        <p className="text-[var(--text-meta)] text-[var(--color-panel-ink-2)]">
+        <p className="mt-3 num text-hero">{bahtRounded(balance)}</p>
+        <p className="text-meta text-[var(--color-panel-ink-2)]">
           ยังเป็นหนี้อยู่เท่านี้
         </p>
 
@@ -209,7 +209,7 @@ export function DashboardPage({
       {/* ---------- งวดล่าสุดเป็นประโยคเดียว ภาษาคน (ข้อ 4.1) ---------- */}
       {currentRow && (
         <section className="mt-6">
-          <p className="text-[var(--text-lead)]">
+          <p className="text-lead">
             งวดที่ {currentRow.index} จ่าย {bahtRounded(currentRow.paymentFixed)}
           </p>
           <SplitBar
@@ -218,7 +218,7 @@ export function DashboardPage({
             principal={currentRow.principalFixed}
             height={10}
           />
-          <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+          <p className="mt-1 text-meta text-[var(--color-ink-2)]">
             เป็นดอกเบี้ย {bahtRounded(currentRow.interestFixed)} เข้าเงินต้น{' '}
             {bahtRounded(currentRow.principalFixed)} · คิดดอก {currentRow.accrualDays} วัน
           </p>
@@ -239,8 +239,8 @@ export function DashboardPage({
 
       {/* ---------- สิทธิลดหย่อนภาษี ---------- */}
       <section className="mt-8 max-w-[520px]">
-        <h2 className="text-[var(--text-row)]">สิทธิลดหย่อนภาษีปี {thisYear + 543}</h2>
-        <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+        <h2 className="text-row">สิทธิลดหย่อนภาษีปี {thisYear + 543}</h2>
+        <p className="mt-1 text-meta text-[var(--color-ink-2)]">
           {computed.length > 1
             ? `รวมดอกเบี้ยจากทั้ง ${computed.length} สัญญา เพราะเพดานเป็นของคนหนึ่งคน ไม่ใช่ต่อสัญญา`
             : 'ดอกเบี้ยบ้านใช้ลดหย่อนได้ตามจริง ไม่เกินเพดาน'}
@@ -248,14 +248,14 @@ export function DashboardPage({
 
         {taxThisYear ? (
           <>
-            <p className="mt-3 num text-[var(--text-figure)]">
+            <p className="mt-3 num text-figure">
               {bahtRounded(taxThisYear.deductibleFixed)}
             </p>
             <CapMeter
               used={taxThisYear.deductibleFixed}
               cap={(TAX_DEDUCTION_CAP_SATANG * FIXED_SCALE) as Fixed}
             />
-            <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+            <p className="mt-1 text-meta text-[var(--color-ink-2)]">
               {taxThisYear.excessFixed > 0n
                 ? `เต็มเพดานแล้ว ส่วนที่เกิน ${bahtRounded(taxThisYear.excessFixed)} ใช้สิทธิไม่ได้`
                 : `เหลือสิทธิอีก ${bahtRounded(((TAX_DEDUCTION_CAP_SATANG * FIXED_SCALE) - taxThisYear.deductibleFixed) as Fixed)}`}
@@ -283,7 +283,7 @@ export function DashboardPage({
           </div>
 
           <div>
-            <span className="block text-[var(--text-meta)] text-[var(--color-ink-2)]">
+            <span className="block text-meta text-[var(--color-ink-2)]">
               ช่วงที่แสดง
             </span>
             <div className="mt-1 flex gap-1">
@@ -295,7 +295,7 @@ export function DashboardPage({
                     setWindowStart(null)
                   }}
                   aria-pressed={windowYears === h.years}
-                  className={`tap rounded-md border px-3 py-2 text-[var(--text-meta)] whitespace-nowrap ${
+                  className={`tap rounded-md border px-3 py-2 text-meta whitespace-nowrap ${
                     windowYears === h.years
                       ? 'border-[var(--color-interest)] bg-[var(--color-interest-tint)] text-[var(--color-interest)]'
                       : 'border-[var(--color-rule)] text-[var(--color-ink-2)] hover:text-[var(--color-ink)]'
@@ -310,7 +310,7 @@ export function DashboardPage({
           {/* เลื่อนหน้าต่างทีละปี เพื่อโฟกัสช่วงที่อยากดู */}
           {windowYears !== null && (
             <div>
-              <span className="block text-[var(--text-meta)] text-[var(--color-ink-2)]">
+              <span className="block text-meta text-[var(--color-ink-2)]">
                 โฟกัสปี
               </span>
               <div className="mt-1 flex items-center gap-2">
@@ -322,7 +322,7 @@ export function DashboardPage({
                 >
                   ←
                 </button>
-                <span className="num min-w-[112px] text-center text-[var(--text-meta)]">
+                <span className="num min-w-[112px] text-center text-meta">
                   {winFrom + 543} – {Math.min(winTo, finalYear) + 543}
                 </span>
                 <button
@@ -339,7 +339,7 @@ export function DashboardPage({
         </div>
 
         {windowYears !== null && (
-          <p className="mt-2 text-[var(--text-meta)] text-[var(--color-ink-3)]">
+          <p className="mt-2 text-meta text-[var(--color-ink-3)]">
             แสดง {viewRows.length} งวด จากทั้งหมด {rows.length} งวด · สัญญาถึงปี{' '}
             {finalYear + 543}
           </p>
@@ -352,7 +352,7 @@ export function DashboardPage({
 
       <button
         onClick={() => onOpenLoan(selected.item)}
-        className="tap mt-8 text-[var(--text-meta)] text-[var(--color-interest)] hover:underline"
+        className="tap mt-8 text-meta text-[var(--color-interest)] hover:underline"
       >
         ดูตารางผ่อนของ {selected.item.propertyName} →
       </button>
@@ -381,9 +381,9 @@ function Line({
     <div className="flex items-baseline justify-between gap-4 py-2">
       <span className="text-[var(--color-ink-2)]">{k}</span>
       <span className="text-right">
-        <span className={`num text-[var(--text-row)] ${color}`}>{v}</span>
+        <span className={`num text-row ${color}`}>{v}</span>
         {sub && (
-          <span className="block text-[var(--text-micro)] text-[var(--color-ink-3)]">{sub}</span>
+          <span className="block text-micro text-[var(--color-ink-3)]">{sub}</span>
         )}
       </span>
     </div>

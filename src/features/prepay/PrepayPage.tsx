@@ -187,14 +187,14 @@ export function PrepayPage({
     <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
       <button
         onClick={onBack}
-        className="tap mb-4 text-[var(--text-meta)] text-[var(--color-interest)] hover:underline"
+        className="tap mb-4 text-meta text-[var(--color-interest)] hover:underline"
       >
         ← กลับ
       </button>
 
       <header className="mb-6">
-        <h1 className="text-[var(--text-hero)]">วางแผนโปะ</h1>
-        <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+        <h1 className="text-hero">วางแผนโปะ</h1>
+        <p className="mt-1 text-meta text-[var(--color-ink-2)]">
           {item.propertyName} · {item.bankLabel} · ค่างวด {baht(item.installmentSatang, 0)}
         </p>
       </header>
@@ -225,7 +225,7 @@ export function PrepayPage({
         </div>
 
         {outcome.roiBps !== null && (
-          <p className="mt-4 text-[var(--text-micro)] text-[var(--color-panel-ink-3)]">
+          <p className="mt-4 text-micro text-[var(--color-panel-ink-3)]">
             ตัวเลขนี้ลดลงเมื่อโปะหนักขึ้น เพราะหนี้หมดเร็วจนไม่เหลือดอกเบี้ยให้ประหยัด —
             ใช้เทียบกับผลตอบแทนของการเอาเงินก้อนเดียวกันไปลงทุนอย่างอื่น
           </p>
@@ -262,7 +262,7 @@ export function PrepayPage({
               key={v.id}
               onClick={() => setView(v.id)}
               aria-pressed={view === v.id}
-              className={`tap rounded-md border px-3 py-2 text-[var(--text-meta)] ${
+              className={`tap rounded-md border px-3 py-2 text-meta ${
                 view === v.id
                   ? 'border-[var(--color-interest)] bg-[var(--color-interest-tint)] text-[var(--color-interest)]'
                   : 'border-[var(--color-rule)] text-[var(--color-ink-2)]'
@@ -300,7 +300,7 @@ export function PrepayPage({
 
       {/* ---------- เครื่องมือปรับทั้งช่วง ---------- */}
       <section className="mt-4 rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4">
-        <p className="text-[var(--text-meta)] text-[var(--color-ink-2)]">
+        <p className="text-meta text-[var(--color-ink-2)]">
           {selected.length === 0
             ? 'แตะเดือนแรก แล้วแตะเดือนสุดท้าย เพื่อเลือกเป็นช่วง'
             : anchor !== null
@@ -314,7 +314,7 @@ export function PrepayPage({
               key={c.label}
               disabled={selected.length === 0}
               onClick={() => applyToSelection(c.value)}
-              className="tap rounded-full border border-[var(--color-rule)] px-3 py-1.5 text-[var(--text-meta)] hover:border-[var(--color-interest)] hover:text-[var(--color-interest)] disabled:opacity-40"
+              className="tap rounded-full border border-[var(--color-rule)] px-3 py-1.5 text-meta hover:border-[var(--color-interest)] hover:text-[var(--color-interest)] disabled:opacity-40"
             >
               {c.label}
             </button>
@@ -333,7 +333,7 @@ export function PrepayPage({
               inputMode="decimal"
               placeholder="ยอดอื่น"
               aria-label="พิมพ์ยอดโปะเอง"
-              className={`tap w-[5.5rem] rounded-full border px-3 py-1.5 text-right text-[var(--text-meta)] num tabular-nums placeholder:text-[var(--color-ink-3)] disabled:opacity-40 ${
+              className={`tap w-[5.5rem] rounded-full border px-3 py-1.5 text-right text-meta num tabular-nums placeholder:text-[var(--color-ink-3)] disabled:opacity-40 ${
                 Number.isNaN(manualAmount)
                   ? 'border-[var(--color-warn)]'
                   : 'border-[var(--color-rule)] focus:border-[var(--color-interest)]'
@@ -342,7 +342,7 @@ export function PrepayPage({
             <button
               onClick={applyManual}
               disabled={manualAmount === null || Number.isNaN(manualAmount)}
-              className="tap rounded-full border border-[var(--color-interest)] px-3 py-1.5 text-[var(--text-meta)] text-[var(--color-interest)] disabled:opacity-40"
+              className="tap rounded-full border border-[var(--color-interest)] px-3 py-1.5 text-meta text-[var(--color-interest)] disabled:opacity-40"
             >
               ใส่
             </button>
@@ -354,7 +354,7 @@ export function PrepayPage({
               key={d}
               disabled={selected.length === 0}
               onClick={() => bumpSelection(d)}
-              className="tap rounded-full border border-[var(--color-rule)] px-3 py-1.5 text-[var(--text-meta)] num hover:border-[var(--color-interest)] disabled:opacity-40"
+              className="tap rounded-full border border-[var(--color-rule)] px-3 py-1.5 text-meta num hover:border-[var(--color-interest)] disabled:opacity-40"
             >
               {d > 0 ? `+${d}` : d}
             </button>
@@ -365,7 +365,7 @@ export function PrepayPage({
                 setSelected([])
                 setAnchor(null)
               }}
-              className="tap px-2 text-[var(--text-meta)] text-[var(--color-ink-3)] hover:underline"
+              className="tap px-2 text-meta text-[var(--color-ink-3)] hover:underline"
             >
               ยกเลิกการเลือก
             </button>
@@ -375,14 +375,14 @@ export function PrepayPage({
         <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-[var(--color-rule)] pt-3">
           <button
             onClick={() => setDraft(copyYear(draft, editingYear, editingYear + 1))}
-            className="tap text-[var(--text-meta)] text-[var(--color-interest)] hover:underline"
+            className="tap text-meta text-[var(--color-interest)] hover:underline"
           >
             คัดลอกยอดปีนี้ไปปี {editingYear + 544}
           </button>
           {draft.overrides[editingYear] && (
             <button
               onClick={() => setDraft(clearYearOverride(draft, editingYear))}
-              className="tap text-[var(--text-meta)] text-[var(--color-ink-3)] hover:underline"
+              className="tap text-meta text-[var(--color-ink-3)] hover:underline"
             >
               ล้างค่าเฉพาะปีนี้ กลับไปใช้แผนฐาน
             </button>
@@ -424,8 +424,8 @@ export function PrepayPage({
 
       {/* ---------- บันทึก/เทียบแผน ---------- */}
       <section className="mt-8">
-        <h2 className="text-[var(--text-row)]">แผนที่บันทึกไว้</h2>
-        <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+        <h2 className="text-row">แผนที่บันทึกไว้</h2>
+        <p className="mt-1 text-meta text-[var(--color-ink-2)]">
           บันทึกได้หลายชุดแล้วสลับดู เช่น โปะสม่ำเสมอ กับ โปะก้อนตอนโบนัส
         </p>
 
@@ -449,7 +449,7 @@ export function PrepayPage({
         </div>
 
         {error && (
-          <p className="mt-3 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-[var(--text-meta)] text-[var(--color-warn)]">
+          <p className="mt-3 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
             {error}
           </p>
         )}
@@ -459,7 +459,7 @@ export function PrepayPage({
             {scenarios.map((s) => (
               <li key={s.id} className="flex items-center justify-between gap-4 py-2">
                 <span>{s.name}</span>
-                <span className="flex gap-3 text-[var(--text-meta)]">
+                <span className="flex gap-3 text-meta">
                   <button
                     onClick={() => void load(s.id)}
                     disabled={busy}
@@ -499,15 +499,15 @@ function Stat({
 }) {
   return (
     <div>
-      <p className="text-[var(--text-meta)] text-[var(--color-panel-ink-2)]">{k}</p>
+      <p className="text-meta text-[var(--color-panel-ink-2)]">{k}</p>
       <p
-        className={`num text-[var(--text-figure)] ${
+        className={`num text-figure ${
           tone === 'principal' ? 'text-[var(--color-principal-dark)]' : ''
         }`}
       >
         {v}
       </p>
-      {sub && <p className="text-[var(--text-micro)] text-[var(--color-panel-ink-3)]">{sub}</p>}
+      {sub && <p className="text-micro text-[var(--color-panel-ink-3)]">{sub}</p>}
     </div>
   )
 }
@@ -532,7 +532,7 @@ function YearNav({
       >
         ←
       </button>
-      <span className="num min-w-[72px] text-center text-[var(--text-row)]">{year + 543}</span>
+      <span className="num min-w-[72px] text-center text-row">{year + 543}</span>
       <button
         onClick={() => onChange(year + 1)}
         disabled={year >= max}
@@ -584,7 +584,7 @@ function CalendarView({
           >
             <button
               onClick={() => onTap(m)}
-              className="tap block w-full text-left text-[var(--text-meta)] text-[var(--color-ink-2)]"
+              className="tap block w-full text-left text-meta text-[var(--color-ink-2)]"
             >
               {MONTH_NAMES[i]}
             </button>
@@ -610,7 +610,7 @@ function CalendarView({
               /* แตะที่ตัวเลข = พิมพ์ค่าเอง สำหรับยอดที่ไม่มีในชิป (ข้อ 3.4) */
               <button
                 onClick={() => setEditing(m)}
-                className="tap mt-1 block w-full text-right num text-[var(--text-row)]"
+                className="tap mt-1 block w-full text-right num text-row"
               >
                 {v === 0 ? (
                   <span className="text-[var(--color-ink-3)]">—</span>
@@ -658,7 +658,7 @@ function ListView({ rows, year }: { rows: readonly ScheduleRow[]; year: number }
             className="rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-3"
           >
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <span className="text-[var(--text-meta)] text-[var(--color-ink-2)]">
+              <span className="text-meta text-[var(--color-ink-2)]">
                 งวด {r.index} · {formatThaiDate(r.date)}
                 {/* เดือนสั้นดอกน้อยกว่า ต้องติดป้ายไม่งั้นดูเหมือนคำนวณผิด */}
                 {r.accrualDays !== 30 && r.accrualDays !== 31 && (
@@ -690,7 +690,7 @@ function ListView({ rows, year }: { rows: readonly ScheduleRow[]; year: number }
               height={6}
             />
 
-            <div className="mt-1 flex flex-wrap justify-between gap-x-4 text-[var(--text-micro)] text-[var(--color-ink-2)]">
+            <div className="mt-1 flex flex-wrap justify-between gap-x-4 text-micro text-[var(--color-ink-2)]">
               <span>
                 ดอก {bahtRounded(r.interestFixed)} · ต้น {bahtRounded(r.principalFixed)} ·{' '}
                 {pct(r.effectiveRateBps)}
@@ -717,15 +717,15 @@ function LumpSection({
   return (
     <section className="mt-4 rounded-lg border border-[var(--color-rule)] p-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-[var(--text-row)]">โปะก้อนตามวันที่</h2>
+        <h2 className="text-row">โปะก้อนตามวันที่</h2>
         <button
           onClick={() => onChange({ ...draft, lumps: [...draft.lumps, newLump(today)] })}
-          className="tap text-[var(--text-meta)] text-[var(--color-interest)] hover:underline"
+          className="tap text-meta text-[var(--color-interest)] hover:underline"
         >
           + เพิ่มก้อน
         </button>
       </div>
-      <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+      <p className="mt-1 text-meta text-[var(--color-ink-2)]">
         บวกเพิ่มจากยอดรายเดือน ไม่ใช่แทนที่ — ต้องตรงวันตัดงวดถึงจะถูกนับในงวดนั้น
       </p>
 
@@ -766,7 +766,7 @@ function LumpSection({
             onClick={() =>
               onChange({ ...draft, lumps: draft.lumps.filter((x) => x.id !== l.id) })
             }
-            className="tap self-end pb-2 text-[var(--text-meta)] text-[var(--color-ink-3)] hover:text-[var(--color-warn)]"
+            className="tap self-end pb-2 text-meta text-[var(--color-ink-3)] hover:text-[var(--color-warn)]"
           >
             ลบ
           </button>

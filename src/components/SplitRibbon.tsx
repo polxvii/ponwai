@@ -114,7 +114,7 @@ export function SplitRibbon({
       </svg>
 
       {/* ป้ายปี — เอาแค่ 3 จุดที่มีความหมาย ไม่ใช่ทุกปี */}
-      <div className="mt-1 flex justify-between text-[var(--text-micro)] text-[var(--color-panel-ink-3)]">
+      <div className="mt-1 flex justify-between text-micro text-[var(--color-panel-ink-3)]">
         <span>{thaiYear(first.date)}</span>
         {crossover !== null && rows[crossover - 1] && (
           <span className="text-[var(--color-panel-ink-2)]">
@@ -125,13 +125,13 @@ export function SplitRibbon({
       </div>
 
       {reversed && (
-        <p className="mt-1 text-[var(--text-micro)] text-[var(--color-panel-ink-2)]">
+        <p className="mt-1 text-micro text-[var(--color-panel-ink-2)]">
           ช่วงโปรเงินต้นชนะอยู่ก่อน แล้วพอพ้นโปรดอกเบี้ยกลับมาชนะ
           วันที่ข้างบนคือจุดที่เงินต้นชนะแล้วไม่กลับ
         </p>
       )}
 
-      <figcaption className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[var(--text-micro)] text-[var(--color-panel-ink-2)]">
+      <figcaption className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-micro text-[var(--color-panel-ink-2)]">
         <span className="flex items-center gap-1.5">
           <span
             className="inline-block size-2.5 rounded-sm"

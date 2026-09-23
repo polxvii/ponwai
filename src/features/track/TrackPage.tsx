@@ -41,12 +41,12 @@ export function TrackPage({ onSignIn }: { onSignIn: () => void }) {
     return (
       <Shell>
         <div className="max-w-[520px] rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-6">
-          <h1 className="text-[var(--text-lead)]">ติดตามสินเชื่อต้องเข้าสู่ระบบ</h1>
+          <h1 className="text-lead">ติดตามสินเชื่อต้องเข้าสู่ระบบ</h1>
           <p className="mt-2 text-[var(--color-ink-2)]">
             ยอดหนี้ ค่างวด และประวัติการจ่าย เป็นข้อมูลส่วนตัว
             เก็บไว้ในบัญชีของคุณเพื่อให้เปิดจากเครื่องไหนก็เห็นข้อมูลเดิม และไม่มีใครอื่นเห็น
           </p>
-          <p className="mt-2 text-[var(--text-meta)] text-[var(--color-ink-3)]">
+          <p className="mt-2 text-meta text-[var(--color-ink-3)]">
             หน้าเปรียบเทียบกับรีไฟแนนซ์ใช้ได้เลยโดยไม่ต้องมีบัญชี
           </p>
           <button
@@ -166,8 +166,8 @@ function TrackShell() {
       <Shell>
       <header className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-[var(--text-hero)]">สินเชื่อของฉัน</h1>
-          <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+          <h1 className="text-hero">สินเชื่อของฉัน</h1>
+          <p className="mt-1 text-meta text-[var(--color-ink-2)]">
             ตารางผ่อนที่คิดจากการจ่ายจริง ไม่ใช่ตารางตั้งต้นของธนาคาร
           </p>
         </div>
@@ -191,7 +191,7 @@ function TrackShell() {
 
       {items !== null && items.length === 0 && (
         <div className="max-w-[520px] rounded-lg border border-dashed border-[var(--color-rule)] p-6">
-          <h2 className="text-[var(--text-lead)]">ยังไม่มีสัญญา</h2>
+          <h2 className="text-lead">ยังไม่มีสัญญา</h2>
           <p className="mt-2 text-[var(--color-ink-2)]">
             เอาสัญญาเงินกู้กับใบแจ้งยอดล่าสุดมากรอก แล้วแอพจะสร้างตารางผ่อนรายวันให้
             ตรงกับใบแจ้งยอดระดับสตางค์
@@ -239,7 +239,7 @@ function SubNav({
           key={t.id}
           onClick={() => onChange(t.id)}
           aria-current={view === t.id ? 'page' : undefined}
-          className={`tap rounded-md px-3 py-1.5 text-[var(--text-meta)] ${
+          className={`tap rounded-md px-3 py-1.5 text-meta ${
             view === t.id
               ? 'bg-[var(--color-interest-tint)] text-[var(--color-interest)]'
               : 'text-[var(--color-ink-2)] hover:text-[var(--color-ink)]'
@@ -283,13 +283,13 @@ function LoanCard({
   return (
     <li className="rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4">
       <button onClick={onOpen} className="tap block w-full text-left">
-        <h2 className="text-[var(--text-lead)]">{item.propertyName}</h2>
-        <p className="text-[var(--text-meta)] text-[var(--color-ink-2)]">
+        <h2 className="text-lead">{item.propertyName}</h2>
+        <p className="text-meta text-[var(--color-ink-2)]">
           {item.bankLabel} · {ORIGIN_LABELS[item.origin]}
           {item.status === 'closed' && ' · ปิดแล้ว'}
         </p>
 
-        <dl className="mt-3 space-y-1 text-[var(--text-meta)]">
+        <dl className="mt-3 space-y-1 text-meta">
           <Row k="วงเงิน" v={baht(item.disbursedSatang, 0)} />
           <Row k="ค่างวด" v={baht(item.installmentSatang, 0)} />
           <Row k="ระยะเวลา" v={formatDuration(item.termMonths)} />
@@ -300,13 +300,13 @@ function LoanCard({
       <div className="mt-3 flex items-center justify-between border-t border-[var(--color-rule)] pt-3">
         <button
           onClick={onOpen}
-          className="tap text-[var(--text-meta)] text-[var(--color-interest)] hover:underline"
+          className="tap text-meta text-[var(--color-interest)] hover:underline"
         >
           ดูตารางผ่อน →
         </button>
 
         {confirming ? (
-          <span className="flex items-center gap-2 text-[var(--text-meta)]">
+          <span className="flex items-center gap-2 text-meta">
             <button
               onClick={() => void drop()}
               disabled={busy}
@@ -321,7 +321,7 @@ function LoanCard({
         ) : (
           <button
             onClick={() => setConfirming(true)}
-            className="tap text-[var(--text-meta)] text-[var(--color-ink-3)] hover:text-[var(--color-warn)]"
+            className="tap text-meta text-[var(--color-ink-3)] hover:text-[var(--color-warn)]"
           >
             ลบ
           </button>

@@ -26,7 +26,7 @@ export function ResetButton({
     return (
       <button
         onClick={() => setConfirming(true)}
-        className="tap shrink-0 text-[var(--text-meta)] text-[var(--color-ink-3)] hover:text-[var(--color-ink-2)] hover:underline"
+        className="tap shrink-0 text-meta text-[var(--color-ink-3)] hover:text-[var(--color-ink-2)] hover:underline"
       >
         {label}
       </button>
@@ -34,7 +34,7 @@ export function ResetButton({
   }
 
   return (
-    <span className="flex shrink-0 items-center gap-3 text-[var(--text-meta)]">
+    <span className="flex shrink-0 items-center gap-3 text-meta">
       <span className="text-[var(--color-ink-2)]">ล้างที่กรอกไว้ทั้งหมด?</span>
       <button
         onClick={() => {

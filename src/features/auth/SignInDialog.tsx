@@ -101,10 +101,10 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
         className="w-full max-w-[380px] rounded-lg bg-[var(--color-paper-raised)] p-6 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-[var(--text-lead)]">
+        <h2 className="text-lead">
           {mode === 'signin' ? 'เข้าสู่ระบบ' : 'สมัครใช้งาน'}
         </h2>
-        <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
+        <p className="mt-1 text-meta text-[var(--color-ink-2)]">
           ข้อมูลสินเชื่อเป็นเรื่องส่วนตัว บัญชีนี้ทำให้เห็นได้เฉพาะคุณคนเดียว
         </p>
 
@@ -120,7 +120,7 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
               ใช้บัญชี Google
             </button>
 
-            <div className="my-4 flex items-center gap-3 text-[var(--text-meta)] text-[var(--color-ink-3)]">
+            <div className="my-4 flex items-center gap-3 text-meta text-[var(--color-ink-3)]">
               <span className="h-px flex-1 bg-[var(--color-rule)]" />
               หรือ
               <span className="h-px flex-1 bg-[var(--color-rule)]" />
@@ -130,7 +130,7 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
 
         <form onSubmit={withEmail} className={providers?.has('google') ? 'space-y-3' : 'mt-5 space-y-3'}>
           <label className="block">
-            <span className="block text-[var(--text-meta)] text-[var(--color-ink-2)]">อีเมล</span>
+            <span className="block text-meta text-[var(--color-ink-2)]">อีเมล</span>
             <input
               type="email"
               autoComplete="email"
@@ -140,7 +140,7 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
             />
           </label>
           <label className="block">
-            <span className="block text-[var(--text-meta)] text-[var(--color-ink-2)]">รหัสผ่าน</span>
+            <span className="block text-meta text-[var(--color-ink-2)]">รหัสผ่าน</span>
             <input
               type="password"
               autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
@@ -157,7 +157,7 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
               onChange={(e) => setRemember(e.target.checked)}
               className="mt-0.5 size-4 shrink-0 accent-[var(--color-interest)]"
             />
-            <span className="text-[var(--text-meta)]">
+            <span className="text-meta">
               จำฉันไว้
               <span className="block text-[var(--color-ink-3)]">
                 {remember
@@ -178,7 +178,7 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
 
         {message && (
           <p
-            className={`mt-3 rounded-md px-3 py-2 text-[var(--text-meta)] ${
+            className={`mt-3 rounded-md px-3 py-2 text-meta ${
               message.tone === 'warn'
                 ? 'bg-[var(--color-warn)]/10 text-[var(--color-warn)]'
                 : 'bg-[var(--color-ok)]/10 text-[var(--color-ok)]'
@@ -188,7 +188,7 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
           </p>
         )}
 
-        <div className="mt-4 flex items-center justify-between text-[var(--text-meta)]">
+        <div className="mt-4 flex items-center justify-between text-meta">
           <button
             type="button"
             className="tap text-[var(--color-interest)] underline-offset-2 hover:underline"
