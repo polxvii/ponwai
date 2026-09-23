@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Logo } from './components/Logo'
+import { AppBanners } from './components/AppBanners'
 import { AuthProvider, useAuth, signOut } from './lib/auth'
 import { SignInDialog } from './features/auth/SignInDialog'
 import { ComparePage } from './features/compare/ComparePage'
@@ -83,6 +84,7 @@ function Shell() {
       {tab === 'track' && <TrackPage onSignIn={() => setSigningIn(true)} />}
 
       {signingIn && <SignInDialog onClose={() => setSigningIn(false)} />}
+      <AppBanners />
     </>
   )
 }

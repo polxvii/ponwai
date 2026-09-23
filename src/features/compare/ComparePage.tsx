@@ -114,7 +114,8 @@ export function ComparePage() {
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] lg:gap-10">
         {/* ---------- ฝั่งกรอก ---------- */}
-        <div className="space-y-6">
+        {/* min-w-0 จำเป็น: grid item ตั้งต้นเป็น min-width:auto ลูกที่กว้างจะดันคอลัมน์จนหน้าเลื่อนได้ */}
+        <div className="min-w-0 space-y-6">
           <section>
             <h2 className="mb-3 text-[var(--text-row)]">เงื่อนไขร่วม</h2>
             <div className="grid grid-cols-2 gap-3">
@@ -182,7 +183,7 @@ export function ComparePage() {
         </div>
 
         {/* ---------- ฝั่งผลลัพธ์ ---------- */}
-        <div>
+        <div className="min-w-0">
           {error && (
             <p className="rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-[var(--text-meta)] text-[var(--color-warn)]">
               {error}
