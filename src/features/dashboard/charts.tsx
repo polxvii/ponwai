@@ -118,6 +118,89 @@ export function BalanceChart({
 
 // ---------- กราฟ 3 ----------
 
+export type TipItem = { dataKey?: string | number | undefined; value?: unknown }
+type TipProps = {
+  active?: boolean | undefined
+  payload?: readonly TipItem[] | undefined
+  label?: unknown
+}
+
+/**
+ * ดึงดอก/ต้น/รวม ออกจาก payload ของ Tooltip
+ *
+ * ⛔ ต้องอ่านจาก dataKey ไม่ใช่ลำดับใน payload
+ *    ลำดับเปลี่ยนได้ตามการซ้อนแท่งและตอนผู้ใช้กดซ่อน series ที่ legend
+ *    ถ้าอ่านตามลำดับแล้วสลับกัน ตัวเลขดอกกับต้นจะกลับหัวโดยไม่มีใครสังเกต
+ */
+export function tooltipTotals(payload: readonly TipItem[] | undefined): {
+  interest: number
+  principal: number
+  total: number
+} {
+  const valueOf = (key: string): number => {
+    const hit = payload?.find((p) => p.dataKey === key)
+    return typeof hit?.value === 'number' && Number.isFinite(hit.value) ? hit.value : 0
+  }
+  const interest = valueOf('interest')
+  const principal = valueOf('principal')
+  return { interest, principal, total: interest + principal }
+}
+
+/**
+ * Tooltip ของแท่งซ้อน — ต้องบอกยอดรวมเป็นตัวเลข
+ *
+ * แท่งซ้อนอ่านความสูงรวมด้วยตาไม่ได้ เพราะฐานของท่อนบนไม่ได้อยู่ที่ 0
+ * ทั้งที่ "ปีนี้จ่ายไปเท่าไหร่" คือคำถามแรกของคนที่เปิดกราฟนี้
+ * (คำบรรยายใต้หัวข้อบอกว่า "ความสูงรวมคือเงินที่จ่ายทั้งปี" — ต้องอ่านค่านั้นได้จริง)
+ */
+function YearBarTooltip({
+  active,
+  payload,
+  label,
+  spanOf,
+}: TipProps & { spanOf: (label: string) => string }) {
+  if (active !== true || !payload || payload.length === 0) return null
+
+  const { interest, principal, total } = tooltipTotals(payload)
+
+  return (
+    <div style={{ ...tooltipStyle, padding: '8px 12px' }}>
+      <div className="text-[var(--color-ink-2)]">
+        {String(label)} · {spanOf(String(label))}
+      </div>
+      <TipRow k="ดอกเบี้ย" v={interest} dot="var(--color-interest)" />
+      <TipRow k="เงินต้น" v={principal} dot="var(--color-principal)" />
+      <div
+        style={{
+          borderTop: '1px solid var(--color-rule)',
+          marginTop: 6,
+          paddingTop: 6,
+          fontWeight: 500,
+        }}
+      >
+        <TipRow k="รวมจ่ายทั้งปี" v={total} />
+      </div>
+    </div>
+  )
+}
+
+function TipRow({ k, v, dot }: { k: string; v: number; dot?: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+      {dot !== undefined && (
+        <span
+          aria-hidden
+          style={{ width: 8, height: 8, borderRadius: 2, background: dot, flexShrink: 0 }}
+        />
+      )}
+      <span style={{ marginRight: 'auto' }}>{k}</span>
+      <span className="num tabular-nums">
+        {Math.round(v).toLocaleString('en-US')} บาท
+      </span>
+    </div>
+  )
+}
+
 export function YearBarsChart({
   rows,
   axis,
@@ -157,12 +240,17 @@ export function YearBarsChart({
             />
             <YAxis tick={axisTick} stroke="var(--color-rule)" width={56} tickFormatter={compact} />
             <Tooltip
-              contentStyle={tooltipStyle}
-              labelFormatter={(l) => `${String(l)} · ${spanOf(String(l))}`}
-              formatter={(v, name) => [
-                `${Math.round(Number(v)).toLocaleString('en-US')} บาท`,
-                name === 'interest' ? 'ดอกเบี้ย' : 'เงินต้น',
-              ]}
+              content={(p) => {
+                const t = p as unknown as TipProps
+                return (
+                  <YearBarTooltip
+                    active={t.active}
+                    payload={t.payload}
+                    label={t.label}
+                    spanOf={spanOf}
+                  />
+                )
+              }}
             />
             <Legend
               formatter={(v: string) => (v === 'interest' ? 'ดอกเบี้ย' : 'เงินต้น')}
