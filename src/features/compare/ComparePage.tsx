@@ -1,14 +1,15 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { rankOffers, sensitivityBand, findRankFlips } from '@engine/compare.js'
 import { baht as toSatang } from '@engine/money.js'
 import { Field, NumberField, SelectField, TextField, Toggle } from '@/components/Field'
 import { formatDuration } from '@/lib/format'
 import { useLocalState } from '@/lib/persist'
+import { ResetButton } from '@/components/ResetButton'
 import { ResultsTable } from './ResultsTable'
 import { CostCurveChart, SensitivityBand } from './CostCurveChart'
 import {
-  BANK_OPTIONS, DEFAULT_COMMON, DEFAULT_DRAFTS, MAX_OFFERS, MIN_OFFERS, OTHER_BANK,
-  emptyDraft, nextBankCode, offerLabel, promoYears, toLoanOffer, assessCompleteness,
+  BANK_OPTIONS, EMPTY_COMMON, EMPTY_DRAFTS, MAX_OFFERS, MIN_OFFERS, OTHER_BANK,
+  emptyDraft, offerLabel, promoYears, toLoanOffer, assessCompleteness,
   reviveCommon, reviveDrafts,
   type OfferDraft, type CommonTerms,
 } from './model'
@@ -17,16 +18,16 @@ const HORIZON = 36
 
 export function ComparePage() {
   const [common, setCommon, resetCommon] = useLocalState<CommonTerms>(
-    'compare:common', DEFAULT_COMMON, reviveCommon,
+    'compare:common', EMPTY_COMMON, reviveCommon,
   )
   const [drafts, setDrafts, resetDrafts] = useLocalState<OfferDraft[]>(
-    'compare:offers', DEFAULT_DRAFTS, reviveDrafts,
+    'compare:offers', EMPTY_DRAFTS, reviveDrafts,
   )
 
   // Equal-Payment Mode — ฟีเจอร์หลักที่ทำให้แอพนี้ต่าง (ข้อ 2.2)
   const [equalPayment, setEqualPayment, resetEqual] = useLocalState('compare:equalPayment', true)
   const [lockedPayment, setLockedPayment, resetLocked] = useLocalState<number | ''>(
-    'compare:lockedPayment', 20_000,
+    'compare:lockedPayment', '',
   )
 
   /** ล็อกจริงเมื่อเปิดสวิตช์ "และ" มีตัวเลขที่ใช้ได้ — ไม่งั้นค่างวดของแต่ละข้อเสนอยังมีผล */
@@ -39,9 +40,8 @@ export function ComparePage() {
   const addOffer = () =>
     setDrafts((ds) => {
       if (ds.length >= MAX_OFFERS) return ds
-      const code = nextBankCode(ds.map((d) => d.bankCode))
       // id ต้องไม่ซ้ำตลอดอายุของ list ใช้เวลาเป็นฐาน ไม่ใช่ ds.length ที่ชนกันได้หลังลบ
-      return [...ds, emptyDraft(`o${Date.now().toString(36)}`, code)]
+      return [...ds, emptyDraft(`o${Date.now().toString(36)}`)]
     })
 
   const removeOffer = (id: string) =>
@@ -60,11 +60,30 @@ export function ComparePage() {
     return (key: string) => map.get(key) ?? key
   }, [drafts])
 
+  /**
+   * ช่องที่ยังขาดจนผลไม่ขึ้น รวมทุกข้อเสนอแล้วตัดที่ซ้ำออก
+   * เงื่อนไขร่วมอย่างวงเงิน/ระยะเวลาจะซ้ำทุกใบ ถ้าไม่ตัดจะอ่านเป็นรายการยาวเหยียด
+   */
+  const blocking = useMemo(() => {
+    const set = new Set<string>()
+    if (equalPayment && !(typeof lockedPayment === 'number' && lockedPayment > 0)) {
+      set.add('ค่างวดที่จะจ่ายจริงต่อเดือน')
+    }
+    // ส่ง equalPayment ไม่ใช่ locked — ผู้ใช้เปิดสวิตช์ล็อกไว้แล้ว
+    // ช่องที่ต้องไปกรอกคือ "ค่างวดที่จะจ่ายจริงต่อเดือน" ไม่ใช่ค่างวดรายข้อเสนอ
+    for (const d of drafts) {
+      for (const b of assessCompleteness(d, common, equalPayment).blocking) set.add(b)
+    }
+    return [...set]
+  }, [drafts, common, equalPayment, lockedPayment])
+
   const { ranked, bands, flips, error } = useMemo(() => {
     try {
+      // ⛔ ต้องใช้รายการเดียวกับที่โชว์ให้ผู้ใช้ ไม่งั้นมีเคสที่ไม่มีอะไรขาดแต่ผลไม่ขึ้น
+      //    และเคสที่เปิดสวิตช์ล็อกค่างวดไว้แต่ยังไม่กรอกยอด แล้วแอบไปใช้ค่างวดรายข้อเสนอแทน
+      //    ซึ่งผลลัพธ์จะไม่ใช่การเทียบที่จ่ายเท่ากันอย่างที่สวิตช์บอก
+      if (blocking.length > 0) return { ranked: [], bands: [], flips: [], error: null }
       const offers = drafts.map((d) => toLoanOffer(d, common))
-      const ready = drafts.every((d) => assessCompleteness(d, common, locked !== null).ready)
-      if (!ready) return { ranked: [], bands: [], flips: [], error: null }
 
       const opts =
         locked !== null
@@ -77,7 +96,7 @@ export function ComparePage() {
     } catch (e) {
       return { ranked: [], bands: [], flips: [], error: (e as Error).message }
     }
-  }, [drafts, common, locked])
+  }, [drafts, common, locked, blocking])
 
   /** จำนวนงวดที่จะผ่อนจริงของแต่ละข้อเสนอ — ไม่เท่ากับเทอมตามสัญญาถ้าจ่ายเกินค่างวด */
   const actualMonths = useMemo(() => {
@@ -87,7 +106,7 @@ export function ComparePage() {
   }, [ranked])
 
   const missing = drafts.flatMap((d) =>
-    assessCompleteness(d, common, locked !== null).missing.map((m) => ({
+    assessCompleteness(d, common, equalPayment).missing.map((m) => ({
       ...m,
       bank: offerLabel(d),
     })),
@@ -97,19 +116,14 @@ export function ComparePage() {
     // ⛔ ห้ามครอบ max-width แบบมือถือที่ระดับบนสุด (ข้อ 5A.1)
     //    max-width ของ content อยู่ที่ 1440 ไม่ใช่ 480
     <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
-      <header className="mb-8 flex items-start justify-between gap-4">
+      <header className="mb-8 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div>
           <h1 className="text-[var(--text-hero)]">เปรียบเทียบข้อเสนอ</h1>
           <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
             จ่ายเท่ากันทุกธนาคาร แล้วดูว่าใครทำให้หนี้เหลือน้อยกว่า
           </p>
         </div>
-        <button
-          onClick={resetAll}
-          className="tap shrink-0 text-[var(--text-meta)] text-[var(--color-ink-3)] hover:text-[var(--color-ink-2)] hover:underline"
-        >
-          เริ่มใหม่
-        </button>
+        <ResetButton onReset={resetAll} />
       </header>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] lg:gap-10">
@@ -129,7 +143,7 @@ export function ComparePage() {
                 <NumberField
                   value={common.termYears}
                   max={40}
-                  onChange={(v) => setCommon({ ...common, termYears: typeof v === 'number' ? v : 30 })}
+                  onChange={(v) => setCommon({ ...common, termYears: v })}
                 />
               </Field>
             </div>
@@ -191,9 +205,14 @@ export function ComparePage() {
           )}
 
           {ranked.length === 0 && !error && (
-            <p className="text-[var(--color-ink-2)]">
-              กรอกเรตและค่างวดให้ครบอย่างน้อย 1 ปี แล้วผลลัพธ์จะขึ้นทันที
-            </p>
+            <div className="text-[var(--color-ink-2)]">
+              <p>กรอกให้ครบแล้วผลลัพธ์จะขึ้นทันที ยังขาด</p>
+              <ul className="mt-2 space-y-1 text-[var(--text-meta)]">
+                {blocking.map((b) => (
+                  <li key={b}>· {b}</li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {ranked.length > 0 && (
@@ -235,7 +254,7 @@ function OfferForm({
 }: {
   index: number
   draft: OfferDraft
-  termYears: number
+  termYears: number | ''
   /** จำนวนงวดที่จะผ่อนจริงตามตาราง null = ยังคำนวณไม่ได้ */
   actualMonths: number | null
   /** ไม่ null = ล็อกค่างวดอยู่ ค่างวดในช่องนี้จะไม่ถูกใช้คำนวณ */
@@ -391,8 +410,13 @@ function quoteHint(quoted: number | '', locked: number | null): string | undefin
  *    เช่น สัญญา 30 ปีแต่จ่าย 40,000 ปิดใน 8 ปี เรตลอยตัวกินแค่ 5 ปี ไม่ใช่ 27
  *    ตัวเลขที่เกินจริงทำให้ผู้ใช้กลัวเรตลอยตัวมากกว่าที่ควร
  */
-function floatingHint(termYears: number, promo: number, actualMonths: number | null): string {
+function floatingHint(
+  termYears: number | '',
+  promo: number,
+  actualMonths: number | null,
+): string {
   if (actualMonths === null) {
+    if (termYears === '') return 'กรอกระยะเวลาก่อน จึงจะบอกได้ว่าเรตนี้กินเวลาเท่าไหร่'
     const left = Math.max(0, termYears - promo)
     return left > 0 ? `ตามสัญญากินเวลา ${left} ปีจาก ${termYears}` : 'สัญญาจบก่อนพ้นโปร'
   }

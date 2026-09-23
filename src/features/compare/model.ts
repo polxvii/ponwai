@@ -39,8 +39,12 @@ export const BANK_PRESETS: readonly BankPreset[] = [
 /** ธนาคารที่ไม่อยู่ในรายการ — ผู้ใช้พิมพ์ชื่อเอง (ผู้ให้กู้ท้องถิ่น สหกรณ์ หรือแบงก์ที่เพิ่งเข้าตลาด) */
 export const OTHER_BANK = 'OTHER'
 
-/** ตัวเลือกในช่องเลือกธนาคาร — มี "อื่น ๆ" ต่อท้ายเสมอ */
+/** ยังไม่ได้เลือก — ต้องมี ไม่งั้นช่อง select จะโชว์ธนาคารแรกเหมือนผู้ใช้เลือกไว้เอง */
+export const NO_BANK = ''
+
+/** ตัวเลือกในช่องเลือกธนาคาร — ขึ้นต้นด้วยช่องว่าง ปิดท้ายด้วย "อื่น ๆ" */
 export const BANK_OPTIONS: readonly { value: string; label: string }[] = [
+  { value: NO_BANK, label: 'เลือกธนาคาร' },
   ...BANK_PRESETS.map((b) => ({ value: b.code, label: b.isSfi ? `${b.nameTh} (รัฐ)` : b.nameTh })),
   { value: OTHER_BANK, label: 'อื่น ๆ — พิมพ์ชื่อเอง' },
 ]
@@ -73,7 +77,7 @@ export type OfferDraft = {
   lockinMonths: number
 }
 
-export function emptyDraft(id: string, bankCode: string): OfferDraft {
+export function emptyDraft(id: string, bankCode: string = NO_BANK): OfferDraft {
   return {
     id,
     bankCode,
@@ -101,33 +105,36 @@ export const MAX_OFFERS = 5
 /** ต่ำกว่านี้ไม่เรียกว่าเปรียบเทียบ */
 export const MIN_OFFERS = 2
 
-export const DEFAULT_DRAFTS: OfferDraft[] = [
-  { ...emptyDraft('a', 'KBANK'), promoRates: [2.5, 3.25, 3.75], floatingRate: 5.5, installment: 20_000, appraisalFee: 3_000 },
-  { ...emptyDraft('b', 'SCB'),   promoRates: [2.9, 2.9, 3.4],   floatingRate: 5.3, installment: 20_000, appraisalFee: 3_000, otherFee: 9_000 },
-]
-
-/** ธนาคารถัดไปที่ยังไม่ถูกเลือก — กันเพิ่มแล้วได้ธนาคารซ้ำ */
-export function nextBankCode(used: readonly string[]): string {
-  return BANK_PRESETS.find((b) => !used.includes(b.code))?.code ?? OTHER_BANK
-}
+/**
+ * เริ่มต้นเป็นการ์ดเปล่า MIN_OFFERS ใบ
+ *
+ * ⛔ ห้ามใส่ตัวเลขตัวอย่างไว้ ผู้ใช้แยกไม่ออกว่าอันไหนของตัวเองอันไหนของแอพ
+ *    แล้วเผลอตัดสินใจจากเลขที่ไม่ใช่ใบเสนอจริง
+ */
+export const EMPTY_DRAFTS: OfferDraft[] = [emptyDraft('a'), emptyDraft('b')]
 
 /** ชื่อที่จะโชว์ในตารางและกราฟ */
 export function offerLabel(d: OfferDraft): string {
   if (d.bankCode === OTHER_BANK) return d.customName.trim() || 'ธนาคารอื่น'
+  if (d.bankCode === NO_BANK) return 'ยังไม่เลือกธนาคาร'
   return bankName(d.bankCode)
 }
 
 /** ข้อมูลที่ใช้ร่วมกันทุกข้อเสนอ — ต้องเท่ากันหมด ไม่งั้นเทียบคนละฐาน */
 export type CommonTerms = {
   loanAmount: number | ''
-  termYears: number
+  termYears: number | ''
   startDate: ISODate
   dueDayOfMonth: number
 }
 
-export const DEFAULT_COMMON: CommonTerms = {
-  loanAmount: 3_000_000,
-  termYears: 30,
+/**
+ * startDate/dueDayOfMonth ไม่มีช่องให้กรอกในหน้านี้ เพราะการเทียบเป็นการเทียบ "เชิงเปรียบเทียบ"
+ * ทุกข้อเสนอใช้วันเดียวกันหมด วันที่แน่นอนจึงไม่เปลี่ยนลำดับ — ค่าคงที่ตรงนี้ไม่ใช่ default ที่ผู้ใช้ต้องแก้
+ */
+export const EMPTY_COMMON: CommonTerms = {
+  loanAmount: '',
+  termYears: '',
   startDate: isoDate('2026-10-01'),
   dueDayOfMonth: 1,
 }
@@ -137,7 +144,9 @@ export const DEFAULT_COMMON: CommonTerms = {
 export type Completeness = {
   /** คำนวณได้แล้วหรือยัง */
   ready: boolean
-  /** รายการที่ยังขาด พร้อมผลกระทบเป็นบาท */
+  /** ช่องที่ขาดแล้วคำนวณไม่ได้เลย — ชื่อต้องตรงกับ label ในฟอร์ม */
+  blocking: string[]
+  /** รายการที่ยังขาด พร้อมผลกระทบเป็นบาท — ขาดได้ ผลยังขึ้น แต่คลาดเคลื่อน */
   missing: { label: string; impact: string }[]
 }
 
@@ -170,13 +179,20 @@ export function assessCompleteness(
     missing.push({ label: 'เบี้ย MRTA', impact: 'ถ้ารวมในวงเงิน ต้นทุนจริงอาจสูงกว่าเบี้ยหลายเท่า' })
   }
 
-  const ready =
-    typeof common.loanAmount === 'number' &&
-    (hasLockedPayment || (typeof d.installment === 'number' && d.installment > 0)) &&
-    typeof d.floatingRate === 'number' &&
-    d.promoRates.some((r) => typeof r === 'number')
+  // ⛔ ขาดข้อไหนก็คำนวณไม่ได้ ต้องบอกชื่อช่องตรง ๆ ไม่ใช่ปล่อยหน้าว่าง
+  //    ไม่งั้นผู้ใช้กรอกไปสามช่องแล้วนั่งรอผลที่ไม่มีวันขึ้น
+  const blocking: string[] = []
+  if (!(typeof common.loanAmount === 'number' && common.loanAmount > 0)) blocking.push('วงเงินกู้')
+  if (!(typeof common.termYears === 'number' && common.termYears > 0)) blocking.push('ระยะเวลา')
+  if (hasLockedPayment) {
+    // ค่างวดที่ล็อกไว้ถูกตรวจที่ระดับหน้า ไม่ใช่รายข้อเสนอ
+  } else if (!(typeof d.installment === 'number' && d.installment > 0)) {
+    blocking.push('ค่างวดที่จะจ่าย')
+  }
+  if (!d.promoRates.some((r) => typeof r === 'number')) blocking.push('เรตปีที่ 1–3')
+  if (typeof d.floatingRate !== 'number') blocking.push('หลังพ้นโปร')
 
-  return { ready, missing }
+  return { ready: blocking.length === 0, blocking, missing }
 }
 
 // ---------- แปลงเป็น LoanOffer ----------
@@ -246,7 +262,7 @@ export function toLoanOffer(d: OfferDraft, common: CommonTerms): LoanOffer {
     bankCode: d.id,
     productName: offerLabel(d),
     loanAmountSatang: sat(common.loanAmount),
-    termMonths: common.termYears * 12,
+    termMonths: num(common.termYears) * 12,
     startDate,
     dueDayOfMonth: common.dueDayOfMonth,
     rateSteps: rateStepsFromYearlyRates(promo, bps(Math.round(num(d.floatingRate) * 100))),
@@ -270,7 +286,7 @@ export function toLoanOffer(d: OfferDraft, common: CommonTerms): LoanOffer {
           creditLife: {
             kind: 'MRTA' as const,
             premiumSatang: sat(d.mrtaPremium),
-            coverageYears: Math.min(15, common.termYears),
+            coverageYears: Math.min(15, num(common.termYears)),
             financed: d.mrtaFinanced,
             rateDiscountBps: bps(Math.round(num(d.mrtaRateDiscount) * 100)),
             isRequired: false,
@@ -298,7 +314,7 @@ export function reviveDrafts(raw: unknown): OfferDraft[] | null {
     .filter((d): d is Partial<OfferDraft> => typeof d === 'object' && d !== null)
     .slice(0, MAX_OFFERS)
     .map((d, i) => {
-      const base = emptyDraft(d.id ?? String(i), d.bankCode ?? BANK_PRESETS[0]!.code)
+      const base = emptyDraft(d.id ?? String(i), d.bankCode ?? NO_BANK)
       if (typeof d.customName !== 'string') delete d.customName
       const merged = { ...base, ...d }
       // promoRates ต้องเป็น array เสมอ ถ้าของเก่าเพี้ยนให้กลับไปใช้ของ default
@@ -310,7 +326,7 @@ export function reviveDrafts(raw: unknown): OfferDraft[] | null {
 
 export function reviveCommon(raw: unknown): CommonTerms | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
-  return { ...DEFAULT_COMMON, ...(raw as Partial<CommonTerms>) }
+  return { ...EMPTY_COMMON, ...(raw as Partial<CommonTerms>) }
 }
 
 /** จำนวนปีที่มีเรตโปร — ใช้บอกว่าเรตลอยตัวกินเวลาเท่าไหร่ของสัญญา */

@@ -11,25 +11,32 @@ import type { Satang } from '@engine/money.js'
 import { isoDate } from '@engine/date.js'
 import { Field, NumberField, SelectField, TextField, Toggle, DateField } from '@/components/Field'
 import { useLocalState } from '@/lib/persist'
+import { ResetButton } from '@/components/ResetButton'
+import { todayISO } from '../track/model'
 import { baht, bahtRounded, formatDuration, formatThaiDate } from '@/lib/format'
 import { BANK_OPTIONS, OTHER_BANK } from '../compare/model'
 import { InterestCurveChart } from './InterestCurveChart'
 import {
-  DEFAULT_CURRENT, DEFAULT_RETENTION, DEFAULT_REFI,
-  buildScenarios, contextOf, penaltyOf, refiMovingCost, refiReady,
+  emptyCurrent, EMPTY_RETENTION, EMPTY_REFI,
+  buildScenarios, contextOf, penaltyOf, refiMissing, refiMovingCost, refiReady, retentionUsable,
   reviveCurrent, reviveRetention, reviveRefi,
   type CurrentLoan, type RetentionDraft, type RefiDraft,
 } from './model'
 
+/** อ่านครั้งเดียวตอนโหลดโมดูล ไม่งั้นค่าตั้งต้นเปลี่ยนทุก render แล้ว reset วนไม่จบ */
+const TODAY = todayISO()
+const EMPTY_CURRENT = emptyCurrent(TODAY)
+const REVIVE_CURRENT = reviveCurrent(TODAY)
+
 export function RefinancePage() {
   const [current, setCurrent, resetCurrent] = useLocalState<CurrentLoan>(
-    'refi:current', DEFAULT_CURRENT, reviveCurrent,
+    'refi:current', EMPTY_CURRENT, REVIVE_CURRENT,
   )
   const [retention, setRetention, resetRetention] = useLocalState<RetentionDraft>(
-    'refi:retention', DEFAULT_RETENTION, reviveRetention,
+    'refi:retention', EMPTY_RETENTION, reviveRetention,
   )
   const [refi, setRefi, resetRefi] = useLocalState<RefiDraft>(
-    'refi:offer', DEFAULT_REFI, reviveRefi,
+    'refi:offer', EMPTY_REFI, reviveRefi,
   )
 
   const resetAll = () => {
@@ -60,22 +67,18 @@ export function RefinancePage() {
 
   const penalty = penaltyOf(current)
   const moving = refiMovingCost(current, refi)
+  const missing = refiMissing(current, refi)
 
   return (
     <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
-      <header className="mb-8 flex items-start justify-between gap-4">
+      <header className="mb-8 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div>
           <h1 className="text-[var(--text-hero)]">รีไฟแนนซ์คุ้มไหม</h1>
           <p className="mt-1 text-[var(--text-meta)] text-[var(--color-ink-2)]">
             เทียบ 3 ทางพร้อมกันเสมอ — อยู่เฉย ๆ / ขอลดดอกกับธนาคารเดิม / ย้ายธนาคาร
           </p>
         </div>
-        <button
-          onClick={resetAll}
-          className="tap shrink-0 text-[var(--text-meta)] text-[var(--color-ink-3)] hover:text-[var(--color-ink-2)] hover:underline"
-        >
-          เริ่มใหม่
-        </button>
+        <ResetButton onReset={resetAll} />
       </header>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] lg:gap-10">
@@ -97,10 +100,16 @@ export function RefinancePage() {
             </p>
           )}
 
+          {/* บอกให้ครบว่ายังขาดช่องไหน ไม่ใช่ทิ้งให้ไล่หาเองว่าทำไมผลยังไม่ขึ้น */}
           {outcomes.length === 0 && !error && (
-            <p className="text-[var(--color-ink-2)]">
-              กรอกยอดหนี้คงเหลือ ค่างวด และเรตที่จ่ายอยู่ แล้วผลลัพธ์จะขึ้นทันที
-            </p>
+            <div className="text-[var(--color-ink-2)]">
+              <p>กรอกให้ครบแล้วผลลัพธ์จะขึ้นทันที ยังขาด</p>
+              <ul className="mt-2 space-y-1 text-[var(--text-meta)]">
+                {missing.map((m) => (
+                  <li key={m}>· {m}</li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {outcomes.length > 0 && (
@@ -339,7 +348,7 @@ function CurrentLoanForm({
           <NumberField
             value={c.remainingMonths}
             max={480}
-            onChange={(v) => onChange({ remainingMonths: typeof v === 'number' ? v : 0 })}
+            onChange={(v) => onChange({ remainingMonths: v })}
           />
         </Field>
         <Field label="วันที่พิจารณา" hint={formatThaiDate(c.asOf, 'long')}>
@@ -349,7 +358,7 @@ function CurrentLoanForm({
           <NumberField
             value={c.dueDayOfMonth}
             max={31}
-            onChange={(v) => onChange({ dueDayOfMonth: typeof v === 'number' ? v : 1 })}
+            onChange={(v) => onChange({ dueDayOfMonth: v })}
           />
         </Field>
       </div>
@@ -359,7 +368,7 @@ function CurrentLoanForm({
           <NumberField
             value={c.lockinLeftMonths}
             max={120}
-            onChange={(v) => onChange({ lockinLeftMonths: typeof v === 'number' ? v : 0 })}
+            onChange={(v) => onChange({ lockinLeftMonths: v })}
           />
         </Field>
         <Field
@@ -416,6 +425,13 @@ function RetentionForm({
               <NumberField value={r.fee} onChange={(v) => onChange({ fee: v })} />
             </Field>
           </div>
+
+          {/* ต้องบอก ไม่งั้นผู้ใช้เปิดสวิตช์ไว้แล้วงงว่าทำไมตารางมีแค่ 2 ทาง */}
+          {!retentionUsable(r) && (
+            <p className="mt-3 text-[var(--text-meta)] text-[var(--color-ink-3)]">
+              ยังไม่เอาทางนี้ไปเทียบ เพราะต้องมีทั้งเรตโปรอย่างน้อย 1 ปี และเรตหลังพ้นโปร
+            </p>
+          )}
         </>
       )}
     </section>
@@ -482,7 +498,7 @@ function RefiForm({
           <NumberField
             value={r.termYears}
             max={40}
-            onChange={(v) => onChange({ termYears: typeof v === 'number' ? v : 30 })}
+            onChange={(v) => onChange({ termYears: v })}
           />
         </Field>
         <Field label="lock-in ใหม่" suffix="เดือน">

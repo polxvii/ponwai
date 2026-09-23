@@ -14,26 +14,28 @@ import {
 } from '@engine/refinance.js'
 import type { RateStep } from '@engine/types.js'
 import { mergeShape } from '@/lib/persist'
-import { OTHER_BANK, bankName } from '../compare/model'
+import { NO_BANK, OTHER_BANK, bankName } from '../compare/model'
 
 /** ชื่อที่จะโชว์ในตาราง — ผู้ให้กู้ที่ไม่อยู่ในรายการให้พิมพ์เอง */
 export function refiBankName(r: RefiDraft): string {
   if (r.bankCode === OTHER_BANK) return r.customName.trim() || 'ธนาคารอื่น'
+  if (r.bankCode === NO_BANK) return 'ธนาคารใหม่'
   return bankName(r.bankCode)
 }
 
 /** สภาพหนี้ปัจจุบัน — ตัวเลขทั้งหมดเป็นบาท */
 export type CurrentLoan = {
   balance: number | ''
+  /** วันที่ใช้เป็นจุดตั้งต้นในการเทียบ — ค่าตั้งต้นคือวันนี้ ไม่ใช่ข้อมูลที่ต้องไปหามาจากไหน */
   asOf: ISODate
-  dueDayOfMonth: number
+  dueDayOfMonth: number | ''
   installment: number | ''
   /** เรตที่จ่ายอยู่ตอนนี้ (หลังพ้นโปรแล้ว) เป็น % */
   currentRate: number | ''
   /** งวดที่เหลือตามสัญญาเดิม */
-  remainingMonths: number
-  /** lock-in เดิมเหลืออีกกี่เดือน — 0 = พ้นแล้ว ไถ่ถอนได้ฟรี */
-  lockinLeftMonths: number
+  remainingMonths: number | ''
+  /** lock-in เดิมเหลืออีกกี่เดือน — ว่างหรือ 0 = พ้นแล้ว ไถ่ถอนได้ฟรี */
+  lockinLeftMonths: number | ''
   /** ค่าปรับไถ่ถอนก่อนกำหนด เป็น % ของยอดคงเหลือ */
   penaltyPct: number | ''
 }
@@ -57,7 +59,7 @@ export type RefiDraft = {
   /** ค่างวดตามใบเสนอของธนาคารใหม่ */
   installment: number | ''
   /** เทอมใหม่ เป็นปี — มักถูกยืดกลับไป 30 ปี ซึ่งเป็นกับดัก (ข้อ 2A.2) */
-  termYears: number
+  termYears: number | ''
   lockinMonths: number
 
   /* ---- ต้นทุนการย้าย (ข้อ 2A.3) ---- */
@@ -75,38 +77,49 @@ export type RefiDraft = {
   incentive: number | ''
 }
 
-export const DEFAULT_CURRENT: CurrentLoan = {
-  balance: 2_624_037,
-  asOf: isoDate('2029-10-01'),
-  dueDayOfMonth: 1,
-  installment: 17_500,
-  currentRate: 5.5,
-  remainingMonths: 324,
-  lockinLeftMonths: 0,
-  penaltyPct: 3,
-}
+/**
+ * ⛔ ห้ามใส่ตัวเลขตัวอย่างไว้ในค่าตั้งต้น
+ *    ผู้ใช้แยกไม่ออกว่าเลขไหนของตัวเอง เลขไหนแอพใส่ให้
+ *    แล้วเผลออ่านผลลัพธ์ของสัญญาที่ไม่มีอยู่จริงว่าเป็นของตัวเอง
+ *
+ * ที่ยังเหลือค่าไว้มีแค่ตัวที่เป็น "ข้อเท็จจริงตามกฎหมาย/ตลาด" ไม่ใช่ข้อเสนอของใคร
+ *   mortgageFeePct 1   ค่าจดจำนองตามอัตรากรมที่ดิน
+ *   stampDuty true     อากรแสตมป์ 0.05% เพดาน 10,000
+ *   lockinMonths 36    lock-in มาตรฐานของสินเชื่อรีไฟแนนซ์ไทย
+ * ถ้าลบสามตัวนี้ออก ต้นทุนการย้ายจะต่ำกว่าความจริงทุกครั้งโดยที่ผู้ใช้ไม่รู้ตัว
+ */
+export const emptyCurrent = (today: ISODate): CurrentLoan => ({
+  balance: '',
+  asOf: today,
+  dueDayOfMonth: '',
+  installment: '',
+  currentRate: '',
+  remainingMonths: '',
+  lockinLeftMonths: '',
+  penaltyPct: '',
+})
 
-export const DEFAULT_RETENTION: RetentionDraft = {
+export const EMPTY_RETENTION: RetentionDraft = {
   enabled: true,
-  promoRates: [4.0, 4.0, 4.0],
-  floatingRate: 5.5,
-  fee: 3_000,
+  promoRates: ['', '', ''],
+  floatingRate: '',
+  fee: '',
 }
 
-export const DEFAULT_REFI: RefiDraft = {
-  bankCode: 'SCB',
+export const EMPTY_REFI: RefiDraft = {
+  bankCode: NO_BANK,
   customName: '',
-  promoRates: [3.0, 3.0, 3.0],
-  floatingRate: 5.5,
-  installment: 15_000,
-  termYears: 30,
+  promoRates: ['', '', ''],
+  floatingRate: '',
+  installment: '',
+  termYears: '',
   lockinMonths: 36,
   mortgageFeePct: 1,
   stampDuty: true,
-  appraisalFee: 3_000,
+  appraisalFee: '',
   otherFee: '',
   newMrtaPremium: '',
-  newFirePremium: 2_500,
+  newFirePremium: '',
   clawback: '',
   surrenderRefund: '',
   incentive: '',
@@ -127,7 +140,7 @@ export function contextOf(c: CurrentLoan): RefinanceContext {
   return {
     balanceSatang: sat(c.balance),
     asOf: c.asOf,
-    dueDayOfMonth: c.dueDayOfMonth,
+    dueDayOfMonth: num(c.dueDayOfMonth),
     referenceRates: [],
     conventions: [defaultImportConvention(c.asOf)],
   }
@@ -135,7 +148,7 @@ export function contextOf(c: CurrentLoan): RefinanceContext {
 
 /** ค่าปรับไถ่ถอน — เก็บเฉพาะตอนยังไม่พ้น lock-in เดิม ไม่ใช่ตอนโปะบางส่วน (ข้อ 1.6) */
 export function penaltyOf(c: CurrentLoan): Satang {
-  return prepayPenalty(sat(c.balance), rate(c.penaltyPct), 0, c.lockinLeftMonths)
+  return prepayPenalty(sat(c.balance), rate(c.penaltyPct), 0, num(c.lockinLeftMonths))
 }
 
 export function refiMovingCost(c: CurrentLoan, r: RefiDraft): Satang {
@@ -171,21 +184,24 @@ export function buildScenarios(
       label: `ไม่ทำอะไร คงค่างวด ${num(c.installment).toLocaleString('en-US')}`,
       rateSteps: [{ fromMonth: 1, toMonth: null, kind: 'fixed', fixedRateBps: rate(c.currentRate) }],
       installmentSatang: sat(c.installment),
-      termMonths: c.remainingMonths,
+      termMonths: num(c.remainingMonths),
       movingCostSatang: 0n as Satang,
       lockinMonths: 0,
       autoAdded: true,
     },
   ]
 
-  if (ret.enabled) {
+  // ⛔ ต้องมีเรตจริงก่อนถึงจะใส่ทางนี้ได้
+  //    stepsOf ของว่างให้ 0% ซึ่งทำให้ retention ดูดีที่สุดเสมอแบบผิด ๆ
+  //    และผู้ใช้จะเห็น "ขอลดดอกกับธนาคารเดิม" ชนะขาดทั้งที่ยังไม่ได้กรอกอะไรเลย
+  if (ret.enabled && retentionUsable(ret)) {
     out.push({
       kind: 'retention',
       // retention ไม่ยืดเทอม ไม่จดจำนองใหม่ ค่าใช้จ่ายมีแค่ค่าดำเนินการ
       label: 'ขอลดดอกกับธนาคารเดิม (retention)',
       rateSteps: stepsOf(ret.promoRates, ret.floatingRate),
       installmentSatang: sat(c.installment),
-      termMonths: c.remainingMonths,
+      termMonths: num(c.remainingMonths),
       movingCostSatang: sat(ret.fee),
       lockinMonths: 36,
     })
@@ -196,10 +212,10 @@ export function buildScenarios(
 
   out.push({
     kind: 'refinance',
-    label: `ย้ายไป${refiBankName(r)} ค่างวด ${num(r.installment).toLocaleString('en-US')} / ${r.termYears} ปี`,
+    label: `ย้ายไป${refiBankName(r)} ค่างวด ${num(r.installment).toLocaleString('en-US')} / ${num(r.termYears)} ปี`,
     rateSteps: refiSteps,
     installmentSatang: sat(r.installment),
-    termMonths: r.termYears * 12,
+    termMonths: num(r.termYears) * 12,
     movingCostSatang: cost,
     lockinMonths: r.lockinMonths,
   })
@@ -210,7 +226,7 @@ export function buildScenarios(
       label: `ย้ายไป${refiBankName(r)} แต่คงค่างวดเดิม ${num(c.installment).toLocaleString('en-US')}`,
       rateSteps: refiSteps,
       installmentSatang: sat(c.installment),
-      termMonths: r.termYears * 12,
+      termMonths: num(r.termYears) * 12,
       movingCostSatang: cost,
       lockinMonths: r.lockinMonths,
       autoAdded: true,
@@ -220,27 +236,61 @@ export function buildScenarios(
   return out
 }
 
+/** มีเรตครบพอจะสร้าง rateSteps ที่มีความหมาย — ขาดเรตลอยตัวคือได้ 0% หลังพ้นโปร */
+function hasRates(promo: (number | '')[], floating: number | ''): boolean {
+  return promo.some((x) => typeof x === 'number') && typeof floating === 'number' && floating > 0
+}
+
+/** ทาง retention จะถูกนำไปเทียบจริงไหม — UI ใช้บอกผู้ใช้ว่าทำไมยังไม่ขึ้นในตาราง */
+export function retentionUsable(ret: RetentionDraft): boolean {
+  return hasRates(ret.promoRates, ret.floatingRate)
+}
+
+/**
+ * ช่องที่ยังขาดจนคำนวณไม่ได้ เรียงตามลำดับในฟอร์ม
+ *
+ * ⚠️ ต้องครอบคลุมทุกช่องที่ engine ใช้จริง ไม่ใช่แค่ช่องเด่น ๆ
+ *    ช่องไหนหลุดไป num() จะแปลงค่าว่างเป็น 0 เงียบ ๆ แล้วผลลัพธ์จะผิดแบบดูสมเหตุสมผล
+ *    ซึ่งอันตรายกว่าการไม่แสดงผลเลย
+ *
+ * ⛔ อย่าแยกเงื่อนไข "พร้อมหรือยัง" ไปเขียนซ้ำที่อื่น ให้ refiReady อ่านจากที่นี่ที่เดียว
+ *    ไม่งั้นสองที่จะเพี้ยนจากกันแล้วผู้ใช้เห็นหน้าว่างโดยไม่รู้ว่าขาดอะไร
+ */
+export function refiMissing(c: CurrentLoan, r: RefiDraft): string[] {
+  const out: string[] = []
+  const pos = (v: number | '' | undefined) => num(v) > 0
+
+  // ⚠️ ข้อความต้องตรงกับ label ในฟอร์มเป๊ะ ๆ ไม่งั้นผู้ใช้อ่านแล้วหาช่องไม่เจอ
+  if (!pos(c.balance)) out.push('ยอดคงเหลือวันนี้')
+  if (!pos(c.installment)) out.push('ค่างวดที่จ่ายอยู่')
+  if (!pos(c.currentRate)) out.push('เรตที่จ่ายอยู่')
+  if (!pos(c.remainingMonths)) out.push('งวดที่เหลือตามสัญญา')
+  if (!pos(c.dueDayOfMonth)) out.push('วันตัดรอบของเดือน')
+  if (!r.promoRates.some((x) => typeof x === 'number')) {
+    out.push('เรตปีที่ 1–3 ของธนาคารใหม่')
+  }
+  if (!pos(r.floatingRate)) out.push('หลังพ้นโปร ของธนาคารใหม่')
+  if (!pos(r.installment)) out.push('ค่างวดตามใบเสนอ')
+  if (!pos(r.termYears)) out.push('เทอมใหม่')
+
+  return out
+}
+
 export function refiReady(c: CurrentLoan, r: RefiDraft): boolean {
-  return (
-    num(c.balance) > 0 &&
-    num(c.installment) > 0 &&
-    num(c.currentRate) > 0 &&
-    c.remainingMonths > 0 &&
-    num(r.installment) > 0 &&
-    r.promoRates.some((x) => typeof x === 'number')
-  )
+  return refiMissing(c, r).length === 0
 }
 
 // ---------- อ่านของที่เก็บไว้ในเครื่อง ----------
 
-export const reviveCurrent = (raw: unknown) => mergeShape(raw, DEFAULT_CURRENT)
+export const reviveCurrent = (today: ISODate) => (raw: unknown) =>
+  mergeShape(raw, emptyCurrent(today))
 export const reviveRetention = (raw: unknown) => {
-  const merged = mergeShape(raw, DEFAULT_RETENTION)
-  if (merged && !Array.isArray(merged.promoRates)) merged.promoRates = DEFAULT_RETENTION.promoRates
+  const merged = mergeShape(raw, EMPTY_RETENTION)
+  if (merged && !Array.isArray(merged.promoRates)) merged.promoRates = EMPTY_RETENTION.promoRates
   return merged
 }
 export const reviveRefi = (raw: unknown) => {
-  const merged = mergeShape(raw, DEFAULT_REFI)
-  if (merged && !Array.isArray(merged.promoRates)) merged.promoRates = DEFAULT_REFI.promoRates
+  const merged = mergeShape(raw, EMPTY_REFI)
+  if (merged && !Array.isArray(merged.promoRates)) merged.promoRates = EMPTY_REFI.promoRates
   return merged
 }
