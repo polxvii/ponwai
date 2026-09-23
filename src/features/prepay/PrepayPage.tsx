@@ -55,6 +55,7 @@ export function PrepayPage({
   const [editingYear, setEditingYear] = useState(startYear)
   const [anchor, setAnchor] = useState<number | null>(null)
   const [selected, setSelected] = useState<number[]>([])
+  const [manual, setManual] = useState('')
 
   const [taxRateBps, setTaxRateBps] = useState<number | null>(null)
   const [taxLoaded, setTaxLoaded] = useState(false)
@@ -114,6 +115,20 @@ export function PrepayPage({
   const bumpSelection = (delta: number) => {
     if (selected.length === 0) return
     setDraft(bumpMonths(draft, editingYear, selected, delta))
+  }
+
+  // ยอดที่พิมพ์เอง — null = ยังไม่พิมพ์, NaN = พิมพ์แล้วแต่ใช้ไม่ได้
+  const manualAmount = useMemo(() => {
+    const t = manual.replace(/,/g, '').trim()
+    if (t === '') return null
+    const n = Number(t)
+    return Number.isFinite(n) && n >= 0 ? Math.round(n) : Number.NaN
+  }, [manual])
+
+  const applyManual = () => {
+    if (manualAmount === null || Number.isNaN(manualAmount)) return
+    applyToSelection(manualAmount)
+    setManual('')
   }
 
   async function save() {
@@ -304,6 +319,35 @@ export function PrepayPage({
               {c.label}
             </button>
           ))}
+
+          {/* ยอดที่ไม่มีในชิป — พิมพ์เองแล้วยิงลงทั้งช่วงที่เลือก เหมือนกดชิป */}
+          <span className="inline-flex items-center gap-1">
+            <input
+              value={manual}
+              onChange={(e) => setManual(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') applyManual()
+                if (e.key === 'Escape') setManual('')
+              }}
+              disabled={selected.length === 0}
+              inputMode="decimal"
+              placeholder="ยอดอื่น"
+              aria-label="พิมพ์ยอดโปะเอง"
+              className={`tap w-[5.5rem] rounded-full border px-3 py-1.5 text-right text-[var(--text-meta)] num tabular-nums placeholder:text-[var(--color-ink-3)] disabled:opacity-40 ${
+                Number.isNaN(manualAmount)
+                  ? 'border-[var(--color-warn)]'
+                  : 'border-[var(--color-rule)] focus:border-[var(--color-interest)]'
+              }`}
+            />
+            <button
+              onClick={applyManual}
+              disabled={manualAmount === null || Number.isNaN(manualAmount)}
+              className="tap rounded-full border border-[var(--color-interest)] px-3 py-1.5 text-[var(--text-meta)] text-[var(--color-interest)] disabled:opacity-40"
+            >
+              ใส่
+            </button>
+          </span>
+
           <span className="mx-1 w-px bg-[var(--color-rule)]" />
           {[-500, 500].map((d) => (
             <button
