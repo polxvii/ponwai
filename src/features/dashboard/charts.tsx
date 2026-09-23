@@ -41,21 +41,45 @@ const axisTick = { fill: 'var(--color-ink-3)', fontSize: 12 }
 export function BalanceChart({
   actual,
   noPrepay,
+  hasPrepay,
 }: {
   actual: readonly ScheduleRow[]
   noPrepay: readonly ScheduleRow[]
+  /**
+   * มีการโปะจริงไหม — ต้องคิดจากตารางเต็ม ไม่ใช่จากสองอาร์เรย์ที่ส่งมา
+   * ⛔ ห้ามเดาจาก actual.length === noPrepay.length
+   *    ตอนเลือกช่วงปี ทั้งสองถูกกรองด้วยช่วงเดียวกันจึงยาวเท่ากันแทบทุกครั้ง
+   *    แล้วกราฟจะสรุปว่า "ยังไม่มีการโปะ" พร้อมซ่อนเส้นเปรียบเทียบ
+   *    ทั้งที่เส้นที่เหลือกำลังโชว์ผลของการโปะอยู่ตรงหน้า
+   */
+  hasPrepay: boolean
 }) {
-  const len = Math.max(actual.length, noPrepay.length)
-  if (len === 0) return null
+  if (actual.length === 0 && noPrepay.length === 0) return null
 
-  const data = Array.from({ length: len }, (_, i) => ({
-    month: i + 1,
-    // ปิดหนี้แล้วให้เป็น 0 ไม่ใช่ปล่อยเส้นหาย — ไม่งั้นดูเหมือนข้อมูลขาด
-    actual: i < actual.length ? toBaht(actual[i]!.balanceAfterFixed) : 0,
-    noPrepay: i < noPrepay.length ? toBaht(noPrepay[i]!.balanceAfterFixed) : 0,
-  }))
+  /**
+   * จับคู่สองเส้นด้วย "เลขงวดจริง" ไม่ใช่ลำดับในอาร์เรย์
+   *
+   * ⛔ ห้ามใช้ i + 1 เป็นแกน x
+   *    พอเลือกช่วงปี อาร์เรย์ถูกตัดหัวออก แกน x จะเริ่มนับ 1 ใหม่
+   *    ทำให้ "ปี 5" บนกราฟไม่ใช่ปีที่ 5 ของสัญญา และไม่ตรงกับ "งวดที่ N" บนการ์ดข้างบน
+   */
+  const merged = new Map<number, { month: number; actual?: number; noPrepay?: number }>()
+  const put = (r: ScheduleRow, key: 'actual' | 'noPrepay') => {
+    const hit = merged.get(r.index) ?? { month: r.index }
+    hit[key] = toBaht(r.balanceAfterFixed)
+    merged.set(r.index, hit)
+  }
+  for (const r of noPrepay) put(r, 'noPrepay')
+  for (const r of actual) put(r, 'actual')
 
-  const samePlan = actual.length === noPrepay.length
+  const data = [...merged.values()].sort((a, b) => a.month - b.month)
+  // ปิดหนี้ไปแล้วในงวดที่แผน "ถ้าไม่โปะ" ยังผ่อนอยู่ = หนี้เป็น 0 จริง ไม่ใช่ข้อมูลขาด
+  for (const d of data) if (d.actual === undefined && d.noPrepay !== undefined) d.actual = 0
+
+  const samePlan = !hasPrepay
+
+  // ป้ายแกน x ถี่เกินจะทับกันจนอ่านไม่ออก เว้นช่วงตามจำนวนงวดที่แสดงจริง
+  const labelEvery = (data.length <= 72 ? 1 : data.length <= 180 ? 2 : 5) * 12
 
   return (
     <figure className="mt-8">
@@ -74,7 +98,9 @@ export function BalanceChart({
               dataKey="month"
               tick={axisTick}
               stroke="var(--color-rule)"
-              tickFormatter={(m: number) => (m % 60 === 0 ? `ปี ${String(m / 12)}` : '')}
+              tickFormatter={(m: number) =>
+                m % labelEvery === 0 ? `ปี ${String(m / 12)}` : ''
+              }
               interval={0}
             />
             <YAxis tick={axisTick} stroke="var(--color-rule)" width={56} tickFormatter={compact} />

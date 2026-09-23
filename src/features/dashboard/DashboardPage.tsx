@@ -107,6 +107,14 @@ export function DashboardPage({
   const rows = selected.actual.rows
   const currentIndex = periodsElapsed(rows, today)
 
+  /**
+   * โปะจริงหรือยัง — เทียบตารางเต็มสองชุด ไม่ใช่ชุดที่ถูกกรองตามช่วงปีที่เลือก
+   * ยอดคงเหลือต่างกันแม้งวดเดียวก็ถือว่าโปะแล้ว เพราะจำนวนงวดอาจเท่าเดิมได้
+   */
+  const hasPrepay =
+    rows.length !== selected.noPrepay.rows.length ||
+    rows.some((r, i) => r.balanceAfterFixed !== selected.noPrepay.rows[i]?.balanceAfterFixed)
+
   // ---------- หน้าต่างที่กราฟแสดง ----------
   const firstYear = yearOf(rows[0]?.date ?? today)
   const finalYear = yearOf(rows[rows.length - 1]?.date ?? today)
@@ -338,7 +346,7 @@ export function DashboardPage({
         )}
 
         <YearBarsChart rows={viewRows} axis={axis} />
-        <BalanceChart actual={viewRows} noPrepay={viewNoPrepay} />
+        <BalanceChart actual={viewRows} noPrepay={viewNoPrepay} hasPrepay={hasPrepay} />
         <TaxChart summaries={viewTax} capBaht={CAP_BAHT} />
       </div>
 
