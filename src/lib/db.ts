@@ -560,6 +560,29 @@ export async function addPayment(
   if (res.error) throw new Error(translateDbError(res.error))
 }
 
+/**
+ * แก้ยอดที่บันทึกว่าจ่ายจริง
+ *
+ * ⚠️ ต้องมี ไม่ใช่ให้ลบแล้วบันทึกใหม่
+ *    การลบเซ็ต deleted_at ทิ้งไว้ตลอดกาล กรอกผิดตัวเลขเดียวจะเหลือขยะถาวร
+ *    และถ้ายอดเดิมเคยกระทบยอดกับใบแจ้งยอดตรงแล้ว การแก้ทับตามรอยได้ชัดกว่า
+ */
+export async function updatePayment(
+  paymentId: string,
+  p: { paidDate: ISODate; amountSatang: Satang; kind: PaymentKind | 'fee'; note?: string },
+): Promise<void> {
+  const res = await supabase
+    .from('payments')
+    .update({
+      paid_date: p.paidDate,
+      amount_satang: Number(p.amountSatang),
+      kind: p.kind,
+      note: p.note ?? null,
+    })
+    .eq('id', paymentId)
+  if (res.error) throw new Error(translateDbError(res.error))
+}
+
 /** ⛔ ห้ามลบจริง — ไม่มี policy DELETE บน payments โดยตั้งใจ ประวัติการจ่ายต้องตามรอยได้ */
 export async function removePayment(paymentId: string): Promise<void> {
   const res = await supabase

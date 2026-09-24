@@ -18,8 +18,8 @@ import { baht, bahtRounded, formatDuration, formatMonthSpan, formatThaiDate, pct
 import { downloadCsv, paymentsCsv, reportName, scheduleCsv, yearSummaryCsv } from '@/lib/export'
 import {
   addPayment, getLoanFull, listScenarios, loadScenario, removePayment, toLoanTerms,
-  toPaymentEvents,
-  type LoanFull, type LoanListItem, type ScenarioSummary,
+  toPaymentEvents, updatePayment,
+  type LoanFull, type LoanListItem, type ScenarioSummary, type StoredPayment,
 } from '@/lib/db'
 import type { PrepayPlan } from '@engine/prepay.js'
 import { isoDate } from '@engine/date.js'
@@ -315,6 +315,8 @@ const KIND_LABELS: readonly { value: PaymentKind | 'fee'; label: string }[] = [
 
 function PaymentSection({ full, onChanged }: { full: LoanFull; onChanged: () => void }) {
   const [open, setOpen] = useState(false)
+  /** null = กำลังเพิ่มรายการใหม่ ไม่ใช่แก้ของเดิม */
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [paidDate, setPaidDate] = useState<ISODate>(todayISO())
   const [amount, setAmount] = useState<number | ''>(
     Number(full.loan.installment_satang) / 100,
@@ -324,18 +326,41 @@ function PaymentSection({ full, onChanged }: { full: LoanFull; onChanged: () => 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  function startAdd() {
+    setEditingId(null)
+    setPaidDate(todayISO())
+    setAmount(Number(full.loan.installment_satang) / 100)
+    setKind('installment')
+    setNote('')
+    setError(null)
+    setOpen(true)
+  }
+
+  function startEdit(p: StoredPayment) {
+    setEditingId(p.id)
+    setPaidDate(p.paidDate)
+    setAmount(Number(p.amountSatang) / 100)
+    setKind(p.kind)
+    setNote(p.note ?? '')
+    setError(null)
+    setOpen(true)
+  }
+
   async function submit() {
     if (typeof amount !== 'number' || amount <= 0) return setError('กรอกจำนวนเงินที่จ่าย')
     setBusy(true)
     setError(null)
+    const body = {
+      paidDate,
+      amountSatang: BigInt(Math.round(amount * 100)) as Satang,
+      kind,
+      ...(note.trim() !== '' ? { note: note.trim() } : {}),
+    }
     try {
-      await addPayment(full.loan.id, {
-        paidDate,
-        amountSatang: BigInt(Math.round(amount * 100)) as Satang,
-        kind,
-        ...(note.trim() !== '' ? { note: note.trim() } : {}),
-      })
+      if (editingId === null) await addPayment(full.loan.id, body)
+      else await updatePayment(editingId, body)
       setNote('')
+      setEditingId(null)
       setOpen(false)
       onChanged()
     } catch (e) {
@@ -362,7 +387,7 @@ function PaymentSection({ full, onChanged }: { full: LoanFull; onChanged: () => 
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-row">การจ่ายที่บันทึกไว้ ({full.payments.length})</h2>
         <button
-          onClick={() => setOpen(!open)}
+          onClick={() => (open ? setOpen(false) : startAdd())}
           className="tap text-meta text-[var(--color-interest)] hover:underline"
         >
           {open ? 'ปิด' : '+ บันทึกการจ่าย'}
@@ -390,13 +415,24 @@ function PaymentSection({ full, onChanged }: { full: LoanFull; onChanged: () => 
             <p className="mt-3 text-meta text-[var(--color-warn)]">{error}</p>
           )}
 
-          <button
-            onClick={() => void submit()}
-            disabled={busy}
-            className="tap mt-3 rounded-md bg-[var(--color-interest)] px-4 py-2 text-[var(--color-panel-ink)] disabled:opacity-50"
-          >
-            {busy ? 'กำลังบันทึก…' : 'บันทึก'}
-          </button>
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              onClick={() => void submit()}
+              disabled={busy}
+              className="tap rounded-md bg-[var(--color-interest)] px-4 py-2 text-[var(--color-panel-ink)] disabled:opacity-50"
+            >
+              {busy ? 'กำลังบันทึก…' : editingId === null ? 'บันทึก' : 'บันทึกการแก้ไข'}
+            </button>
+            {editingId !== null && (
+              <button
+                onClick={() => setOpen(false)}
+                disabled={busy}
+                className="tap text-meta text-[var(--color-ink-3)] hover:underline"
+              >
+                ยกเลิก
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -424,6 +460,17 @@ function PaymentSection({ full, onChanged }: { full: LoanFull; onChanged: () => 
               </span>
               <span className="flex items-center gap-3">
                 <span className="num">{baht(p.amountSatang)}</span>
+                <button
+                  onClick={() => startEdit(p)}
+                  disabled={busy}
+                  className={`tap text-meta hover:underline ${
+                    editingId === p.id
+                      ? 'font-medium text-[var(--color-interest)]'
+                      : 'text-[var(--color-interest)]'
+                  }`}
+                >
+                  แก้ไข
+                </button>
                 {/* ⛔ ไม่ลบจริง — ประวัติการจ่ายต้องตามรอยได้ ใช้ soft delete */}
                 <button
                   onClick={() => void drop(p.id)}
