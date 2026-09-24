@@ -6,6 +6,7 @@
  *   พื้นที่แตะขั้นต่ำ 44px
  */
 
+import { useEffect, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 
 export function Field({
@@ -68,28 +69,60 @@ export function NumberField({
   placeholder?: string
   max?: number
 }) {
+  /**
+   * เก็บข้อความที่ผู้ใช้พิมพ์ไว้เอง ไม่วาดจากตัวเลขที่ parse แล้ว
+   *
+   * ⛔ ห้ามใช้ value={format(number)} ตรง ๆ
+   *    พิมพ์ "2." แล้ว Number("2.") = 2 พอวาดกลับเป็น "2" จุดหายทันที
+   *    ทำให้พิมพ์ทศนิยมไม่ได้เลยทั้งแอพ — เรตดอกเบี้ยพิมพ์ 2.5 ไม่ได้
+   *    ต้องให้ข้อความระหว่างพิมพ์เป็นของ input เอง แล้วค่อยส่งตัวเลขออกไป
+   */
+  const [text, setText] = useState(() => (value === '' ? '' : formatNumber(value)))
+
+  // ค่าที่เปลี่ยนจากข้างนอก (โหลดฟอร์ม กด reset เติมค่าอัตโนมัติ) ต้องสะท้อนลงช่อง
+  // แต่ห้ามเขียนทับตอนที่ข้อความปัจจุบันแปลงแล้วได้ค่าเดียวกัน ไม่งั้น "2." โดนลบอีก
+  useEffect(() => {
+    const typed = text.replace(/,/g, '').trim()
+    const matches =
+      value === '' ? typed === '' : typed !== '' && Number(typed) === value
+    if (!matches) setText(value === '' ? '' : formatNumber(value))
+    // ตั้งใจดูเฉพาะ value — text เปลี่ยนเองตอนพิมพ์ ไม่ต้องวิ่งซ้ำ
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+
   return (
     <input
       type="text"
       inputMode="decimal"
       className={inputClass}
-      value={value === '' ? '' : formatWithCommas(value)}
+      value={text}
       placeholder={placeholder}
       onChange={(e) => {
         const raw = e.target.value.replace(/,/g, '').trim()
-        if (raw === '') return onChange('')
-        if (!/^\d*\.?\d*$/.test(raw)) return
+        if (raw !== '' && !/^\d*\.?\d*$/.test(raw)) return
+        setText(groupThousands(raw))
+        if (raw === '' || raw === '.') return onChange('')
         const n = Number(raw)
         if (Number.isNaN(n)) return
-        onChange(max !== undefined && n > max ? max : n)
+        if (max !== undefined && n > max) {
+          setText(formatNumber(max))
+          return onChange(max)
+        }
+        onChange(n)
       }}
+      onBlur={() => setText(value === '' ? '' : formatNumber(value))}
     />
   )
 }
 
-function formatWithCommas(n: number): string {
-  const [whole, frac] = String(n).split('.')
-  const w = (whole ?? '0').replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+function formatNumber(n: number): string {
+  return groupThousands(String(n))
+}
+
+/** ใส่ลูกน้ำเฉพาะจำนวนเต็ม ส่วนทศนิยมคงไว้ตามที่พิมพ์ รวมถึงจุดที่ยังไม่มีเลขตาม */
+function groupThousands(raw: string): string {
+  const [whole, frac] = raw.split('.')
+  const w = (whole ?? '').replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   return frac !== undefined ? `${w}.${frac}` : w
 }
 

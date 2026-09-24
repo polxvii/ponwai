@@ -72,14 +72,25 @@ export function BalanceChart({
   for (const r of noPrepay) put(r, 'noPrepay')
   for (const r of actual) put(r, 'actual')
 
-  const data = [...merged.values()].sort((a, b) => a.month - b.month)
+  const all = [...merged.values()].sort((a, b) => a.month - b.month)
   // ปิดหนี้ไปแล้วในงวดที่แผน "ถ้าไม่โปะ" ยังผ่อนอยู่ = หนี้เป็น 0 จริง ไม่ใช่ข้อมูลขาด
-  for (const d of data) if (d.actual === undefined && d.noPrepay !== undefined) d.actual = 0
+  for (const d of all) if (d.actual === undefined && d.noPrepay !== undefined) d.actual = 0
+
+  /**
+   * ตัดแกน x ที่จุดที่หนี้จริงหมด เผื่อท้ายไว้หน่อยให้เห็นว่าเส้นฐานยังไม่ลง
+   *
+   * ⚠️ ค่างวดที่ไม่พอดอกทำให้แผน "ถ้าไม่โปะ" วิ่งชนเพดาน 1,200 งวดของ engine
+   *    ถ้าลากแกนไปถึงนั่น เส้นจริงจะถูกบีบอยู่ซ้ายสุดราว 15% ของกราฟ
+   *    แล้วที่เหลืออีก 80 ปีเป็นเส้นแบนที่ไม่ได้บอกอะไรเพิ่ม
+   */
+  const lastReal = all.findIndex((d) => d.actual === 0)
+  const cut = lastReal < 0 ? all.length : Math.min(all.length, Math.round(lastReal * 1.2) + 2)
+  const data = all.slice(0, cut)
+  const clipped = cut < all.length
 
   const samePlan = !hasPrepay
 
-  // ป้ายแกน x ถี่เกินจะทับกันจนอ่านไม่ออก เว้นช่วงตามจำนวนงวดที่แสดงจริง
-  const labelEvery = (data.length <= 72 ? 1 : data.length <= 180 ? 2 : 5) * 12
+  const ticks = yearTicks(data.map((d) => d.month))
 
   return (
     <figure className="mt-8">
@@ -88,6 +99,7 @@ export function BalanceChart({
         {samePlan
           ? 'ยังไม่มีการโปะ เส้นเดียวคือแผนตามสัญญา'
           : 'ช่องว่างระหว่างสองเส้นคือผลของการโปะ — ยิ่งห่างยิ่งประหยัด'}
+        {clipped && ' · ตัดแกนที่จุดปิดหนี้ เส้นถ้าไม่โปะยังไม่ลงหลังจากนั้น'}
       </p>
 
       <div style={{ height: 300 }}>
@@ -98,10 +110,8 @@ export function BalanceChart({
               dataKey="month"
               tick={axisTick}
               stroke="var(--color-rule)"
-              tickFormatter={(m: number) =>
-                m % labelEvery === 0 ? `ปี ${String(m / 12)}` : ''
-              }
-              interval={0}
+              ticks={ticks}
+              tickFormatter={(m: number) => `ปี ${String(Math.round(m / 12))}`}
             />
             <YAxis tick={axisTick} stroke="var(--color-rule)" width={56} tickFormatter={compact} />
             <Tooltip
@@ -149,6 +159,24 @@ type TipProps = {
   active?: boolean | undefined
   payload?: readonly TipItem[] | undefined
   label?: unknown
+}
+
+/**
+ * เลือกงวดที่จะติดป้ายบนแกน x ให้ได้ไม่เกิน 6 ป้าย
+ *
+ * ⛔ ห้ามติดป้ายทุก 12 งวดแบบตายตัว
+ *    ค่างวดที่ไม่พอดอกทำให้แผน "ถ้าไม่โปะ" วิ่งถึงเพดาน 1,200 งวดของ engine
+ *    ได้ป้าย 100 อันซ้อนกันจนอ่านไม่ออกบนมือถือ 375px
+ *
+ * ⚠️ และห้ามหารจำนวนงวดตรง ๆ เพื่อหาระยะห่าง จะได้ป้ายแบบ "ปี 17" "ปี 34"
+ *    ซึ่งไม่มีความหมายกับใคร ต้องเลือกจากบันไดปีที่คนอ่านแล้วเข้าใจ
+ */
+export function yearTicks(months: readonly number[]): number[] {
+  if (months.length === 0) return []
+  const spanYears = Math.max(1, Math.ceil(months.length / 12))
+  const stepYears = [1, 2, 5, 10, 25, 50].find((y) => spanYears / y <= 6) ?? 100
+  const every = stepYears * 12
+  return months.filter((m) => m % every === 0)
 }
 
 /**

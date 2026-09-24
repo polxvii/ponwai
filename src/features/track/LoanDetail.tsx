@@ -17,9 +17,11 @@ import { SplitBar } from '@/components/SplitBar'
 import { baht, bahtRounded, formatDuration, formatMonthSpan, formatThaiDate, pct } from '@/lib/format'
 import { downloadCsv, paymentsCsv, reportName, scheduleCsv, yearSummaryCsv } from '@/lib/export'
 import {
-  addPayment, getLoanFull, removePayment, toLoanTerms, toPaymentEvents,
-  type LoanFull, type LoanListItem,
+  addPayment, getLoanFull, listScenarios, loadScenario, removePayment, toLoanTerms,
+  toPaymentEvents,
+  type LoanFull, type LoanListItem, type ScenarioSummary,
 } from '@/lib/db'
+import type { PrepayPlan } from '@engine/prepay.js'
 import { isoDate } from '@engine/date.js'
 import { todayISO } from './model'
 import { balanceOn, settledPeriods } from '@/lib/progress'
@@ -42,6 +44,10 @@ export function LoanDetail({
 }) {
   const [full, setFull] = useState<LoanFull | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [scenarios, setScenarios] = useState<ScenarioSummary[]>([])
+  /** แผนโปะที่เลือกดูอยู่ — null = ดูตามที่จ่ายจริงอย่างเดียว */
+  const [planId, setPlanId] = useState<string>('')
+  const [prepayPlan, setPrepayPlan] = useState<PrepayPlan | null>(null)
   const [axis, setAxis] = useState<GroupAxis>('contract_year')
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -56,6 +62,25 @@ export function LoanDetail({
     }
   }, [item.loanId, reloadKey])
 
+  useEffect(() => {
+    listScenarios(item.loanId)
+      .then(setScenarios)
+      .catch(() => setScenarios([]))
+  }, [item.loanId])
+
+  useEffect(() => {
+    if (planId === '') return setPrepayPlan(null)
+    let alive = true
+    loadScenario(planId)
+      .then((p) => {
+        if (alive) setPrepayPlan(p)
+      })
+      .catch((e: Error) => setError(e.message))
+    return () => {
+      alive = false
+    }
+  }, [planId])
+
   const today = todayISO()
 
   const computed = useMemo(() => {
@@ -63,10 +88,12 @@ export function LoanDetail({
     const terms = toLoanTerms(full)
     // ตารางจากการจ่ายจริง เทียบกับตารางที่ควรเป็นถ้าจ่ายตามสัญญาเป๊ะ ๆ
     const events = toPaymentEvents(full)
-    const actual = buildSchedule(terms, events)
+    // เลือกแผนไว้ = ทั้งหน้าคิดแบบทำตามแผน ไม่ใช่เฉพาะตาราง
+    // ไม่งั้นการ์ดข้างบนกับตารางข้างล่างจะบอกวันปิดหนี้คนละวันบนจอเดียวกัน
+    const actual = buildSchedule(terms, events, prepayPlan ?? undefined)
     const plan = buildSchedule(terms)
     return { terms, events, actual, plan }
-  }, [full])
+  }, [full, prepayPlan])
 
   if (error) {
     return (
@@ -379,7 +406,15 @@ function PaymentSection({ full, onChanged }: { full: LoanFull; onChanged: () => 
           พอบันทึกการจ่ายจริงแล้วตารางจะปรับตาม
         </p>
       ) : (
-        <ul className="divide-y divide-[var(--color-rule)]">
+        /* รายการยาวได้ไม่จำกัด ถ้าปล่อยไหลจะดันตารางผ่อนหลุดจอไปเรื่อย ๆ
+           กันความสูงไว้แล้วให้เลื่อนในกล่องตัวเอง */
+        <ul
+          className={`divide-y divide-[var(--color-rule)] ${
+            full.payments.length > 6
+              ? 'max-h-[19rem] overflow-y-auto rounded-md border border-[var(--color-rule)] px-3'
+              : ''
+          }`}
+        >
           {full.payments.map((p) => (
             <li key={p.id} className="flex items-center justify-between gap-4 py-2">
               <span className="text-meta">
