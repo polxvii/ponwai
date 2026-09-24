@@ -135,6 +135,26 @@ export function PrepayPage({
     [paidExtra],
   )
 
+  /**
+   * เงินที่โปะไปแล้วได้อะไรกลับมา
+   *
+   * ⚠️ คนละฐานกับแผงแผน — แผงแผนตอบว่า "โปะเพิ่มจากนี้แล้วได้อะไร"
+   *    เทียบกับการจ่ายต่อแบบที่ทำอยู่ ซึ่งนับเงินที่โปะไปแล้วไว้หมด
+   *    อันนี้ตอบคนละข้อ คือ "ที่โปะมาแล้วได้อะไร" เทียบกับจ่ายตามสัญญาเป๊ะ ๆ ไม่โปะเลย
+   *    สองข้อนี้ต้องแยกกันบนจอ ไม่งั้นคนที่โปะมา 4.7 ล้านเปิดหน้านี้มาเห็นแต่เลข 0
+   */
+  const done = useMemo(() => {
+    const contractOnly = buildSchedule(terms)
+    return {
+      /* ⛔ แผนฐานชนเพดานจำนวนงวด = จ่ายตามสัญญาแล้วไม่มีวันปิดหนี้
+         ทั้งจำนวนงวดและดอกเบี้ยรวมจะเป็นค่าของเพดาน ไม่ใช่ของความจริง
+         เอาไปลบกันได้ "ประหยัดไป 40 ล้าน เร็วขึ้น 70 ปี" ซึ่งไม่มีความหมาย */
+      comparable: contractOnly.paidOff,
+      periodsSaved: contractOnly.rows.length - baseline.rows.length,
+      interestSavedFixed: (contractOnly.totalInterestFixed - baseline.totalInterestFixed) as Fixed,
+    }
+  }, [terms, baseline])
+
   // ---------- การเลือกช่วง (ข้อ 3.4) ----------
   const tapMonth = (m: number) => {
     if (anchor === null) {
@@ -248,6 +268,41 @@ export function PrepayPage({
 
       {/* ---------- ผลลัพธ์ อัปเดตสดทุกครั้งที่แก้ (ข้อ 3.4) ---------- */}
       <section className="rounded-lg bg-[var(--color-panel)] p-5 text-[var(--color-panel-ink)]">
+        {paidExtraTotal > 0 && (
+          <>
+            <div className="mb-5 border-b border-[var(--color-panel-ink-3)]/30 pb-5">
+              <p className="mb-3 text-meta text-[var(--color-panel-ink-2)]">
+                ผลของเงินที่โปะไปแล้ว
+              </p>
+              <div className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
+                <Stat
+                  k="โปะไปแล้วจริง"
+                  v={Math.round(paidExtraTotal).toLocaleString('en-US')}
+                />
+                <Stat
+                  k="ประหยัดดอกไปแล้ว"
+                  v={done.comparable ? bahtRounded(done.interestSavedFixed) : '—'}
+                  tone="principal"
+                  {...(done.comparable ? {} : { sub: 'จ่ายตามสัญญาอย่างเดียวไม่มีวันปิดหนี้' })}
+                />
+                <Stat
+                  k="ปิดหนี้เร็วขึ้นแล้ว"
+                  v={
+                    done.comparable && done.periodsSaved > 0
+                      ? formatDuration(done.periodsSaved)
+                      : '—'
+                  }
+                  sub="เทียบกับจ่ายตามสัญญาอย่างเดียว"
+                />
+              </div>
+            </div>
+
+            <p className="mb-3 text-meta text-[var(--color-panel-ink-2)]">
+              ถ้าโปะเพิ่มตามแผนนี้อีก
+            </p>
+          </>
+        )}
+
         <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
           <Stat
             k="ปิดหนี้เร็วขึ้นอีก"
@@ -262,9 +317,6 @@ export function PrepayPage({
           <Stat
             k="เงินที่จะโปะเพิ่ม"
             v={bahtRounded(outcome.totalPrepaidFixed)}
-            {...(paidExtraTotal > 0
-              ? { sub: `โปะไปแล้วจริง ${Math.round(paidExtraTotal).toLocaleString('en-US')}` }
-              : {})}
           />
           <Stat
             k="ได้คืนต่อเงินโปะ 1 บาท"
@@ -276,14 +328,6 @@ export function PrepayPage({
             }
           />
         </div>
-
-        {paidExtraTotal > 0 && (
-          <p className="mt-4 text-micro text-[var(--color-panel-ink-3)]">
-            ทุกตัวเลขข้างบนคือ &quot;เพิ่มจากที่ทำอยู่&quot; — เงินที่โปะไปแล้วจริงถูกนับไว้ในเส้นฐานแล้ว
-            ผลของมันคือ {formatDuration(withPlan.rows.length)} ที่เหลือ
-            ตัวเลขที่เห็นเป็น 0 จึงแปลว่ายังไม่ได้วางแผนโปะเพิ่มจากนี้ ไม่ใช่ว่าไม่ได้นับให้
-          </p>
-        )}
 
         {outcome.roiBps !== null && (
           <p className="mt-4 text-micro text-[var(--color-panel-ink-3)]">
