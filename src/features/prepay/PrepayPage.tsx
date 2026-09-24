@@ -10,9 +10,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { buildSchedule } from '@engine/schedule.js'
+import { findInstallment } from '@engine/rates.js'
 import { evaluatePrepayPlan } from '@engine/prepay-roi.js'
-import type { Fixed } from '@engine/money.js'
-import { year as yearOf, type ISODate } from '@engine/date.js'
+import { FIXED_SCALE, toFixed, type Fixed } from '@engine/money.js'
+import { month as monthOf, year as yearOf, type ISODate } from '@engine/date.js'
 import type { ScheduleRow } from '@engine/types.js'
 import { SplitBar } from '@/components/SplitBar'
 import { Field, NumberField, SelectField, TextField, DateField } from '@/components/Field'
@@ -96,6 +97,29 @@ export function PrepayPage({
   }, [draft, terms, events, baseline, item.loanId, otherLoans, taxRateBps])
 
   const lastYear = yearOf((withPlan.rows[withPlan.rows.length - 1] ?? baseline.rows[0]!).date)
+
+  /**
+   * ยอดที่จ่ายเกินค่างวดไปแล้วจริง ของงวดที่เลยวันตัดมาแล้ว
+   *
+   * ⛔ ต้องแสดงในปฏิทินแบบแก้ไม่ได้ ไม่ใช่ปล่อยว่างเหมือนไม่เคยโปะ
+   *    ปฏิทินที่โชว์ "—" ทั้งที่เดือนนั้นโปะไปแล้วจริง ทำให้ผู้ใช้วางแผนซ้ำซ้อน
+   *    และตัวเลข "เงินที่โปะรวม" จะไม่ตรงกับที่จ่ายไปจริง
+   * ⛔ และต้องแก้ที่นี่ไม่ได้ เพราะของจริงอยู่ที่ยอดชำระจริงของงวดนั้น
+   *    ถ้าให้พิมพ์ทับได้ แผนจะขัดกับประวัติการจ่ายโดยไม่มีอะไรเตือน
+   */
+  const paidExtra = useMemo(() => {
+    const out = new Map<string, number>()
+    for (const r of baseline.rows) {
+      if (r.date > today) break
+      if (!r.flags.includes('actual_payment')) continue
+      const scheduled = toFixed(
+        findInstallment(terms.installmentSteps, r.index, terms.installmentSatang),
+      )
+      const extra = r.paymentFixed - scheduled
+      if (extra > 0n) out.set(`${yearOf(r.date)}-${monthOf(r.date)}`, Number(extra / FIXED_SCALE) / 100)
+    }
+    return out
+  }, [baseline, terms, today])
 
   // ---------- การเลือกช่วง (ข้อ 3.4) ----------
   const tapMonth = (m: number) => {
@@ -297,6 +321,7 @@ export function PrepayPage({
       {view === 'calendar' ? (
         <CalendarView
           draft={draft}
+          paidExtra={paidExtra}
           year={editingYear}
           selected={selected}
           anchor={anchor}
@@ -563,6 +588,7 @@ function YearNav({
  */
 function CalendarView({
   draft,
+  paidExtra,
   year,
   selected,
   anchor,
@@ -570,6 +596,8 @@ function CalendarView({
   onSetOne,
 }: {
   draft: PrepayDraft
+  /** "ปี-เดือน" -> ยอดที่จ่ายเกินค่างวดไปแล้วจริง ล็อกไว้แก้ที่นี่ไม่ได้ */
+  paidExtra: ReadonlyMap<string, number>
   year: number
   selected: readonly number[]
   anchor: number | null
@@ -577,15 +605,18 @@ function CalendarView({
   onSetOne: (m: number, v: number) => void
 }) {
   const [editing, setEditing] = useState<number | null>(null)
-  const values = Array.from({ length: 12 }, (_, i) => amountAt(draft, year, i + 1))
+  const doneAt = (m: number) => paidExtra.get(`${year}-${m}`)
+  // เดือนที่โปะไปแล้วจริงให้โชว์ยอดจริง ไม่ใช่ยอดที่ตั้งไว้ในแผน
+  const values = Array.from({ length: 12 }, (_, i) => doneAt(i + 1) ?? amountAt(draft, year, i + 1))
   const max = Math.max(1, ...values)
 
   return (
     <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-3">
       {values.map((v, i) => {
         const m = i + 1
-        const isSelected = selected.includes(m)
-        const isAnchor = anchor === m
+        const done = doneAt(m)
+        const isSelected = done === undefined && selected.includes(m)
+        const isAnchor = done === undefined && anchor === m
         return (
           <div
             key={m}
@@ -596,13 +627,23 @@ function CalendarView({
             }`}
           >
             <button
-              onClick={() => onTap(m)}
+              onClick={() => done === undefined && onTap(m)}
               className="tap block w-full text-left text-meta text-[var(--color-ink-2)]"
             >
               {MONTH_NAMES[i]}
+              {done !== undefined && (
+                <span className="ml-1 text-[var(--color-principal-dark)]">จ่ายแล้ว</span>
+              )}
             </button>
 
-            {editing === m ? (
+            {done !== undefined ? (
+              <span
+                title="ยอดที่จ่ายเกินค่างวดไปแล้วจริง แก้ที่นี่ไม่ได้ — ต้องแก้ที่ยอดชำระจริงของงวดนั้น"
+                className="mt-1 block w-full cursor-not-allowed text-right num text-row text-[var(--color-principal-dark)]"
+              >
+                {done.toLocaleString('en-US')}
+              </span>
+            ) : editing === m ? (
               <input
                 autoFocus
                 type="text"

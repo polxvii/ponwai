@@ -88,8 +88,18 @@ function TrackShell() {
           setView({ kind: 'dashboard' })
           reload()
         }}
-        onPlanPrepay={() => setView({ kind: 'prepay', item: view.item })}
-        onReconcile={() => setView({ kind: 'reconcile', item: view.item })}
+        /* ⚠️ ต้อง reload ก่อนออกจากหน้านี้
+           bundles ถูกโหลดครั้งเดียวตอน mount ส่วนหน้ารายละเอียดโหลดสัญญาของตัวเองแยก
+           แก้ยอดจ่ายที่นี่แล้วเด้งไปวางแผนโปะ จะได้ข้อมูลเก่าที่ยังไม่มีการแก้
+           ซึ่งทำให้ยอดที่จ่ายเกินค่างวดไม่ขึ้นในปฏิทิน ทั้งที่บันทึกไปแล้ว */
+        onPlanPrepay={() => {
+          reload()
+          setView({ kind: 'prepay', item: view.item })
+        }}
+        onReconcile={() => {
+          reload()
+          setView({ kind: 'reconcile', item: view.item })
+        }}
         onEdit={(full) => setView({ kind: 'edit', item: view.item, full })}
       />
     )
