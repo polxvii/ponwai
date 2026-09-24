@@ -54,3 +54,21 @@ export function balanceOn(
   const hit = rows.find((r) => r.index === n)
   return hit?.balanceAfterFixed ?? ((disbursedSatang * FIXED_SCALE) as Fixed)
 }
+
+/**
+ * ดอกเบี้ยรวมของ n งวดแรก
+ *
+ * ⚠️ มีไว้เพื่อเทียบสองตารางที่ "ยาวไม่เท่ากัน" โดยตัดที่จุดเดียวกัน
+ *    ถามว่า "ที่โปะมาประหยัดดอกไปแล้วเท่าไหร่" ต้องเทียบเฉพาะงวดที่ผ่านมาจริง
+ *    ไม่ใช่เอายอดรวมทั้งสัญญามาลบกัน
+ *
+ * ⛔ ยอดรวมทั้งสัญญาใช้ไม่ได้เมื่อค่างวดตามสัญญาไม่พอจ่ายดอกเบี้ย
+ *    ตารางฝั่งนั้นจะวิ่งไปชนเพดานจำนวนงวด ยอดรวมกลายเป็นค่าของเพดาน
+ *    ผลต่างจะอ่านได้ว่า "ประหยัดไป 40 ล้าน" ซึ่งไม่ใช่ความจริง
+ *    แต่ n งวดแรกมีอยู่จริงทั้งสองฝั่งเสมอ จึงเทียบได้ทุกสัญญา
+ */
+export function interestUpTo(rows: readonly ScheduleRow[], n: number): Fixed {
+  return rows
+    .slice(0, Math.max(0, Math.min(n, rows.length)))
+    .reduce((a, r) => (a + r.interestFixed) as Fixed, 0n as Fixed)
+}

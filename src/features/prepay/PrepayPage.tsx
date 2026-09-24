@@ -19,7 +19,7 @@ import { SplitBar } from '@/components/SplitBar'
 import { Field, NumberField, SelectField, TextField, DateField } from '@/components/Field'
 import { baht, bahtRounded, formatDuration, formatThaiDate, pct } from '@/lib/format'
 import { isoDate } from '@engine/date.js'
-import { settledPeriods } from '@/lib/progress'
+import { interestUpTo, settledPeriods } from '@/lib/progress'
 import {
   deleteScenario, getMarginalTaxRateBps, listScenarios, loadScenario, saveScenario,
   setMarginalTaxRateBps, toLoanTerms, toPaymentEvents,
@@ -158,15 +158,25 @@ export function PrepayPage({
 
   const done = useMemo(() => {
     const contractOnly = buildSchedule(terms)
+    const settled = settledPeriods(baseline.rows, events, today)
+
+    // หนี้ที่ยังเหลือเมื่อครบอายุสัญญา ถ้าจ่ายแต่ค่างวด — ใช้แทนตัวเลข "เร็วขึ้น" ที่เทียบไม่ได้
+    const atTerm = contractOnly.rows.find((r) => r.index === terms.termMonths)
+
     return {
+      settled,
+      interestSavedSoFarFixed: (interestUpTo(contractOnly.rows, settled) -
+        interestUpTo(baseline.rows, settled)) as Fixed,
+
       /* ⛔ แผนฐานชนเพดานจำนวนงวด = จ่ายตามสัญญาแล้วไม่มีวันปิดหนี้
-         ทั้งจำนวนงวดและดอกเบี้ยรวมจะเป็นค่าของเพดาน ไม่ใช่ของความจริง
-         เอาไปลบกันได้ "ประหยัดไป 40 ล้าน เร็วขึ้น 70 ปี" ซึ่งไม่มีความหมาย */
+         จำนวนงวดที่เอาไปลบกันจะเป็นค่าของเพดาน ไม่ใช่ของความจริง */
       comparable: contractOnly.paidOff,
       periodsSaved: contractOnly.rows.length - baseline.rows.length,
-      interestSavedFixed: (contractOnly.totalInterestFixed - baseline.totalInterestFixed) as Fixed,
+      interestSavedLifetimeFixed: (contractOnly.totalInterestFixed -
+        baseline.totalInterestFixed) as Fixed,
+      balanceAtTermFixed: atTerm?.balanceAfterFixed ?? null,
     }
-  }, [terms, baseline])
+  }, [terms, baseline, events, today])
 
   // ---------- การเลือกช่วง (ข้อ 3.4) ----------
   const tapMonth = (m: number) => {
@@ -287,40 +297,47 @@ export function PrepayPage({
               <p className="mb-3 text-meta text-[var(--color-panel-ink-2)]">
                 ผลของเงินที่โปะไปแล้ว
               </p>
-              {/* ⛔ ตารางตามสัญญาที่ไม่มีวันปิดหนี้ เอาไปลบกันไม่ได้
-                  แต่ห้ามโชว์ขีดทิ้งไว้เฉย ๆ ด้วย — "ค่างวดตามสัญญาไม่พอปิดหนี้"
-                  คือข้อค้นพบที่สำคัญที่สุดของสัญญาแบบนี้ ต้องพูดออกมาตรง ๆ แทน */}
-              {done.comparable ? (
-                <div className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
-                  <Stat
-                    k="โปะไปแล้วจริง"
-                    v={Math.round(paidExtraTotal).toLocaleString('en-US')}
-                  />
-                  <Stat
-                    k="ประหยัดดอกไปแล้ว"
-                    v={bahtRounded(done.interestSavedFixed)}
-                    tone="principal"
-                  />
-                  <Stat
-                    k="ปิดหนี้เร็วขึ้นแล้ว"
-                    v={done.periodsSaved > 0 ? formatDuration(done.periodsSaved) : '—'}
-                    sub="เทียบกับจ่ายตามสัญญาอย่างเดียว"
-                  />
-                </div>
-              ) : (
-                <>
-                  <Stat
-                    k="โปะไปแล้วจริง"
-                    v={Math.round(paidExtraTotal).toLocaleString('en-US')}
-                    tone="principal"
-                  />
-                  <p className="mt-3 text-micro text-[var(--color-panel-ink-3)]">
-                    จ่ายแค่ค่างวดตามสัญญาอย่างเดียว ดอกเบี้ยหลังพ้นโปรโตเร็วกว่าเงินต้นที่ตัดได้
-                    หนี้จะไม่มีวันหมด จึงไม่มีตัวเลข &quot;เร็วขึ้นเท่าไหร่&quot; ให้เทียบ —
-                    เงินก้อนนี้คือสิ่งที่ทำให้สัญญานี้ปิดได้จริงใน{' '}
-                    {formatDuration(baseline.rows.length)} นับจากงวดแรก
-                  </p>
-                </>
+              <div className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
+                <Stat
+                  k="โปะไปแล้วจริง"
+                  v={Math.round(paidExtraTotal).toLocaleString('en-US')}
+                />
+                <Stat
+                  k="ประหยัดดอกไปแล้ว"
+                  v={bahtRounded(done.interestSavedSoFarFixed)}
+                  tone="principal"
+                  sub={`ใน ${done.settled} งวดที่ผ่านมา`}
+                />
+                <Stat
+                  k="ปิดหนี้เร็วขึ้นแล้ว"
+                  v={
+                    done.comparable && done.periodsSaved > 0
+                      ? formatDuration(done.periodsSaved)
+                      : '—'
+                  }
+                  {...(done.comparable
+                    ? { sub: `ประหยัดดอกทั้งสัญญา ${bahtRounded(done.interestSavedLifetimeFixed)}` }
+                    : {})}
+                />
+              </div>
+
+              {/* ⛔ ค่างวดไม่พอปิดหนี้ = ไม่มีตัวเลข "เร็วขึ้น" ให้เทียบจริง ๆ
+                  แต่ห้ามปล่อยขีดไว้เฉย ๆ — บอกหนี้ที่ยังเหลือตอนครบสัญญาแทน
+                  เป็นตัวเลขที่มีอยู่จริงและบอกความร้ายแรงได้ตรงกว่าจำนวนปี */}
+              {!done.comparable && (
+                <p className="mt-3 text-micro text-[var(--color-panel-ink-3)]">
+                  จ่ายแค่ค่างวดตามสัญญาอย่างเดียว ดอกเบี้ยหลังพ้นโปรโตเร็วกว่าเงินต้นที่ตัดได้
+                  หนี้จึงไม่มีวันหมด
+                  {done.balanceAtTermFixed !== null && (
+                    <>
+                      {' '}(ครบ {formatDuration(terms.termMonths)}แล้วยังเหลือหนี้อีก{' '}
+                      {bahtRounded(done.balanceAtTermFixed)})
+                    </>
+                  )}{' '}
+                  ไม่มีวันปิดหนี้ให้เอามาเทียบว่าเร็วขึ้นเท่าไหร่ —
+                  เงินที่โปะมาคือสิ่งที่ทำให้สัญญานี้ปิดได้จริงใน{' '}
+                  {formatDuration(baseline.rows.length)} นับจากงวดแรก
+                </p>
               )}
             </div>
 
@@ -333,12 +350,16 @@ export function PrepayPage({
         <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
           <Stat
             k="ปิดหนี้เร็วขึ้นอีก"
-            v={outcome.periodsSaved > 0 ? formatDuration(outcome.periodsSaved) : '—'}
-            sub={`เหลืออีก ${formatDuration(periodsLeft)}`}
+            v={
+              baseline.paidOff && outcome.periodsSaved > 0
+                ? formatDuration(outcome.periodsSaved)
+                : '—'
+            }
+            sub={baseline.paidOff ? `เหลืออีก ${formatDuration(periodsLeft)}` : 'ยังไม่มีวันปิดหนี้'}
           />
           <Stat
             k="ประหยัดดอกเบี้ย"
-            v={bahtRounded(outcome.interestSavedFixed)}
+            v={baseline.paidOff ? bahtRounded(outcome.interestSavedFixed) : '—'}
             tone="principal"
           />
           <Stat
@@ -356,7 +377,16 @@ export function PrepayPage({
           />
         </div>
 
-        {outcome.roiBps !== null && (
+        {/* ⛔ เส้นฐานชนเพดานจำนวนงวด = ผลต่างทุกตัวเทียบกับเพดาน ไม่ใช่กับความจริง
+            ปล่อยไว้จะได้ "เร็วขึ้นอีก 82 ปี" ซึ่งไม่มีความหมาย */}
+        {!baseline.paidOff && (
+          <p className="mt-4 text-micro text-[var(--color-warn)]">
+            จ่ายต่อแบบที่ทำอยู่ หนี้ยังไม่มีวันหมด — ยังไม่มีวันปิดหนี้ให้เอามาเทียบว่าเร็วขึ้นเท่าไหร่
+            ลองเพิ่มยอดโปะในปฏิทินจนตัวเลขเริ่มขึ้น นั่นคือจุดที่สัญญานี้เริ่มปิดได้
+          </p>
+        )}
+
+        {baseline.paidOff && outcome.roiBps !== null && (
           <p className="mt-4 text-micro text-[var(--color-panel-ink-3)]">
             ตัวเลขนี้ลดลงเมื่อโปะหนักขึ้น เพราะหนี้หมดเร็วจนไม่เหลือดอกเบี้ยให้ประหยัด —
             ใช้เทียบกับผลตอบแทนของการเอาเงินก้อนเดียวกันไปลงทุนอย่างอื่น
