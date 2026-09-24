@@ -186,6 +186,16 @@ export function PrepayPage({
       interestSavedLifetimeFixed: (contractOnly.totalInterestFixed -
         baseline.totalInterestFixed) as Fixed,
       balanceAtTermFixed: atTerm?.balanceAfterFixed ?? null,
+
+      /**
+       * ปิดหนี้ก่อนกำหนดสัญญากี่งวด
+       *
+       * ⚠️ ใช้เมื่อฝั่ง "จ่ายตามสัญญาอย่างเดียว" ไม่มีวันปิดหนี้ให้เอามาลบ
+       *    กำหนด 30 ปีเป็นเส้นตายจริงที่เขียนไว้ในสัญญา ไม่ใช่ค่าที่เราสมมติขึ้น
+       *    จึงตอบเป็น "ปี" ได้โดยไม่ต้องเดาวันปิดหนี้ของตารางที่ไม่มีวันจบ
+       * ⛔ คนละความหมายกับ periodsSaved ห้ามเอาไปแสดงใต้ป้ายเดียวกัน
+       */
+      periodsBeforeTerm: baseline.paidOff ? terms.termMonths - baseline.rows.length : null,
       // ดอกเบี้ยต่องวดหลังพ้นโปร เทียบกับค่างวด — สาเหตุที่หนี้ไม่ลด บอกเป็นตัวเลขได้
       interestPerPeriodFixed: atTerm?.interestFixed ?? null,
       installmentAtTermFixed: atTerm
@@ -339,42 +349,37 @@ export function PrepayPage({
                     v={formatDuration(done.periodsSaved)}
                     sub={`ประหยัดดอกทั้งสัญญา ${bahtRounded(done.interestSavedLifetimeFixed)}`}
                   />
-                ) : (
+                ) : done.periodsBeforeTerm !== null && done.periodsBeforeTerm > 0 ? (
                   <Stat
-                    k="หนี้วันนี้น้อยลง"
-                    v={
-                      done.debtAvoidedNowFixed === null
-                        ? '—'
-                        : bahtRounded(done.debtAvoidedNowFixed)
-                    }
-                    {...(done.balanceNowIfNeverPrepaidFixed === null
+                    k="ปิดก่อนครบสัญญา"
+                    v={formatDuration(done.periodsBeforeTerm)}
+                    {...(done.balanceAtTermFixed === null
                       ? {}
                       : {
-                          sub: `ถ้าไม่โปะเลยวันนี้จะเป็นหนี้ ${bahtRounded(done.balanceNowIfNeverPrepaidFixed)}`,
+                          sub: `ถ้าไม่โปะ ครบ ${formatDuration(terms.termMonths)} ยังเหลือหนี้ ${bahtRounded(done.balanceAtTermFixed)}`,
                         })}
                   />
+                ) : (
+                  <Stat k="ปิดก่อนครบสัญญา" v="—" sub="ยังไม่มีวันปิดหนี้" />
                 )}
               </div>
 
-              {/* ⛔ ค่างวดไม่พอปิดหนี้ = ไม่มีตัวเลข "เร็วขึ้น" ให้เทียบจริง ๆ
-                  แต่ห้ามปล่อยขีดไว้เฉย ๆ — บอกหนี้ที่ยังเหลือตอนครบสัญญาแทน
-                  เป็นตัวเลขที่มีอยู่จริงและบอกความร้ายแรงได้ตรงกว่าจำนวนปี */}
+              {/* ⚠️ ต้องบอกว่าตัวเลขข้างบนเทียบกับอะไร
+                  "ปิดก่อนครบสัญญา" เทียบกับกำหนด 30 ปีที่เขียนไว้ในสัญญา
+                  ไม่ใช่เทียบกับวันปิดหนี้ของการจ่ายตามค่างวด ซึ่งไม่มี
+                  ⛔ ห้ามเขียนว่า "เร็วขึ้นเท่านี้เทียบกับไม่โปะ" — คนละอย่างกัน */}
               {!done.comparable && (
                 <p className="mt-3 text-micro text-[var(--color-panel-ink-3)]">
-                  {done.interestPerPeriodFixed !== null && done.installmentAtTermFixed !== null ? (
+                  {done.interestPerPeriodFixed !== null && done.installmentAtTermFixed !== null && (
                     <>
                       หลังพ้นโปร ดอกเบี้ยงวดละ {bahtRounded(done.interestPerPeriodFixed)} แต่ค่างวดมี{' '}
-                      {bahtRounded(done.installmentAtTermFixed)} เงินต้นจึงไม่ถูกตัดเลย
-                      จ่ายตามสัญญาอย่างเดียวหนี้จะไม่ลดไม่ว่าผ่านไปกี่ปี
+                      {bahtRounded(done.installmentAtTermFixed)} เงินต้นจึงไม่ถูกตัดเลย{' '}
                     </>
-                  ) : (
-                    <>จ่ายแค่ค่างวดตามสัญญาอย่างเดียว เงินต้นไม่ถูกตัด หนี้จึงไม่ลดไม่ว่าผ่านไปกี่ปี</>
-                  )}{' '}
-                  จึงไม่มี &quot;กี่ปี&quot; ให้เอามาลบกัน —
-                  เงินที่โปะมาคือสิ่งที่ทำให้สัญญานี้ปิดได้จริงใน{' '}
-                  {formatDuration(baseline.rows.length)} นับจากงวดแรก
-                  {' '}ถ้าจริง ๆ ธนาคารขึ้นค่างวดหลังพ้นโปร ใส่ไว้ในช่อง &quot;ค่างวดหลังพ้นโปร&quot;
-                  ที่หน้าแก้ไขสัญญา แล้วตัวเลขนี้จะคำนวณได้
+                  )}
+                  จ่ายตามค่างวดอย่างเดียวหนี้ไม่ลดไม่ว่าผ่านไปกี่ปี จึงไม่มีวันปิดหนี้ของฝั่งนั้น —
+                  ตัวเลขข้างบนเทียบกับกำหนด {formatDuration(terms.termMonths)} ที่เขียนไว้ในสัญญาแทน
+                  {' '}ถ้าจริง ๆ ธนาคารขึ้นค่างวดหลังพ้นโปร ใส่ในช่อง
+                  &quot;ค่างวดหลังพ้นโปร&quot; ที่หน้าแก้ไขสัญญา แล้วจะเทียบกับวันปิดหนี้จริงได้
                 </p>
               )}
             </div>
