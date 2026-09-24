@@ -18,7 +18,7 @@ import { isoDate, type ISODate } from '@engine/date.js'
 import { bps, type Bps, type Satang } from '@engine/money.js'
 import type {
   DateRoll, RollCalendar,
-  LoanConvention, LoanTerms, PaymentEvent, PaymentKind, RateStep,
+  InstallmentStep, LoanConvention, LoanTerms, PaymentEvent, PaymentKind, RateStep,
 } from '@engine/types.js'
 import type { DayCountBasis } from '@engine/accrual.js'
 import type { PrepayPlan } from '@engine/prepay.js'
@@ -135,9 +135,59 @@ export type NewLoanInput = {
   /** อัตราช่วงโปรเป็นรายปี ตามด้วยอัตราลอยตัว */
   promoRatesBps: readonly number[]
   floatingRateBps: number
+  /**
+   * ค่างวดของแต่ละปีโปร ยาวเท่ากับ promoRatesBps — null = ใช้ค่างวดตั้งต้น
+   * แยกจาก installmentSatang เพราะธนาคารคิดค่างวดช่วงโปรต่างจากช่วงลอยตัว
+   */
+  promoInstallmentsSatang?: readonly (Satang | null)[]
+  /** ค่างวดหลังพ้นโปร null = ใช้ค่างวดตั้งต้น */
+  floatingInstallmentSatang?: Satang | null
   dayCountBasis: DayCountBasis
   rounding: RoundingMode
   capitaliseUnpaidInterest: boolean
+}
+
+/**
+ * แถวขั้นอัตราของสัญญา — ปีโปรปีละแถว ปิดท้ายด้วยแถวลอยตัวที่ to_month เป็น null
+ * ค่างวดของช่วงเก็บบนแถวเดียวกัน เพราะเป็นช่วงเวลาชุดเดียวกันเสมอ
+ */
+function rateStepRows(loanId: string, input: NewLoanInput): Record<string, unknown>[] {
+  /**
+   * ⚠️ ไม่กำหนดค่างวดเฉพาะช่วง = ไม่ใส่คีย์นี้เลย ไม่ใช่ใส่ null
+   *    ถ้ายังไม่ได้รัน migration 20260924000001 คอลัมน์นี้จะยังไม่มี
+   *    การส่งคีย์ที่ไม่มีคอลัมน์รองรับทำให้ insert พังทั้งชุด
+   *    ซึ่งอันตรายมากใน updateLoan ที่ลบขั้นอัตราทิ้งไปก่อนแล้ว — จะเหลือสัญญาที่ไม่มีอัตราเลย
+   *    เขียนแบบนี้ทำให้สัญญาที่ไม่ได้ใช้ค่างวดหลายช่วงทำงานได้ทั้งสองสคีมา
+   */
+  const withPay = (base: Record<string, unknown>, pay: Satang | null | undefined) =>
+    pay === null || pay === undefined ? base : { ...base, installment_satang: Number(pay) }
+
+  const promoPay = input.promoInstallmentsSatang ?? []
+  const rows = input.promoRatesBps.map((rate, i) =>
+    withPay(
+      {
+        loan_id: loanId,
+        from_month: i * 12 + 1,
+        to_month: (i + 1) * 12,
+        kind: 'fixed',
+        fixed_rate_bps: rate,
+      },
+      promoPay[i],
+    ),
+  )
+  rows.push(
+    withPay(
+      {
+        loan_id: loanId,
+        from_month: input.promoRatesBps.length * 12 + 1,
+        to_month: null,
+        kind: 'fixed',
+        fixed_rate_bps: input.floatingRateBps,
+      },
+      input.floatingInstallmentSatang,
+    ),
+  )
+  return rows
 }
 
 /**
@@ -194,21 +244,7 @@ export async function createLoan(input: NewLoanInput): Promise<string> {
         .single(),
     ) as { id: string }
 
-    const steps = input.promoRatesBps.map((rate, i) => ({
-      loan_id: loan.id,
-      from_month: i * 12 + 1,
-      to_month: (i + 1) * 12,
-      kind: 'fixed',
-      fixed_rate_bps: rate,
-    }))
-    steps.push({
-      loan_id: loan.id,
-      from_month: input.promoRatesBps.length * 12 + 1,
-      to_month: null as unknown as number,
-      kind: 'fixed',
-      fixed_rate_bps: input.floatingRateBps,
-    })
-    must(await supabase.from('loan_rate_steps').insert(steps).select('id'))
+    must(await supabase.from('loan_rate_steps').insert(rateStepRows(loan.id, input)).select('id'))
 
     must(
       await supabase
@@ -304,21 +340,7 @@ export async function updateLoan(loanId: string, input: NewLoanInput): Promise<v
   )
 
   await supabase.from('loan_rate_steps').delete().eq('loan_id', loanId)
-  const steps = input.promoRatesBps.map((rate, i) => ({
-    loan_id: loanId,
-    from_month: i * 12 + 1,
-    to_month: (i + 1) * 12,
-    kind: 'fixed',
-    fixed_rate_bps: rate,
-  }))
-  steps.push({
-    loan_id: loanId,
-    from_month: input.promoRatesBps.length * 12 + 1,
-    to_month: null as unknown as number,
-    kind: 'fixed',
-    fixed_rate_bps: input.floatingRateBps,
-  })
-  must(await supabase.from('loan_rate_steps').insert(steps).select('id'))
+  must(await supabase.from('loan_rate_steps').insert(rateStepRows(loanId, input)).select('id'))
 
   // ⛔ ห้ามทับ convention ที่ยืนยันจากใบแจ้งยอดแล้ว
   //    ค่าที่พิสูจน์กับยอดจริงแล้วมีค่ากว่าค่าที่ผู้ใช้เดาในฟอร์มเสมอ
@@ -384,6 +406,8 @@ export async function deleteLoan(loanId: string): Promise<void> {
 
 export type LoanFull = {
   loan: LoanRow
+  /** ค่างวดรายช่วง ว่าง = ใช้ค่างวดตั้งต้นตลอดสัญญา */
+  installmentSteps: InstallmentStep[]
   /** ชื่อทรัพย์สินกับธนาคาร — ต้องมีเพื่อเติมฟอร์มตอนแก้ไขสัญญา */
   propertyName: string
   bankCode: string | null
@@ -432,14 +456,33 @@ export async function getLoanFull(loanId: string): Promise<LoanFull> {
       ? must(await supabase.from('bank_holidays').select('holiday_date'))
       : []
 
-  const rateSteps = (must(stepRows) as {
+  const stepData = must(stepRows) as {
     from_month: number
     to_month: number | null
     kind: 'fixed' | 'index_minus' | 'index_plus'
     fixed_rate_bps: number | null
     index_code: 'MRR' | 'MLR' | 'MOR' | null
     spread_bps: number | null
-  }[]).map((s): RateStep =>
+    installment_satang: number | null
+  }[]
+
+  /**
+   * ค่างวดรายช่วง เก็บอยู่บนแถวเดียวกับขั้นอัตรา (ดู migration 20260924000001)
+   * แถวที่เป็น null แปลว่าใช้ค่างวดตั้งต้นของสัญญา จึงข้ามไปไม่ต้องสร้าง step
+   *
+   * ⚠️ เช็คด้วย typeof ไม่ใช่ !== null
+   *    ถ้ายังไม่ได้รัน migration คอลัมน์นี้จะไม่มีเลย ค่าที่ได้คือ undefined
+   *    ซึ่ง !== null เป็นจริง แล้วจะสร้าง step ที่มียอดเป็น undefined หลุดเข้า engine
+   */
+  const installmentSteps: InstallmentStep[] = stepData
+    .filter((s) => typeof s.installment_satang === 'number')
+    .map((s) => ({
+      fromMonth: s.from_month,
+      toMonth: s.to_month,
+      amountSatang: sat(s.installment_satang),
+    }))
+
+  const rateSteps = stepData.map((s): RateStep =>
     s.kind === 'fixed'
       ? {
           fromMonth: s.from_month,
@@ -492,6 +535,7 @@ export async function getLoanFull(loanId: string): Promise<LoanFull> {
 
   return {
     loan,
+    installmentSteps,
     propertyName: loan.properties?.name ?? '',
     bankCode: loan.loan_offers?.bank_code ?? null,
     bankName: loan.loan_offers?.bank_name ?? '',
@@ -530,6 +574,8 @@ export function toLoanTerms(f: LoanFull): LoanTerms {
     referenceRates: [],
     conventions: f.conventions,
     installmentSatang: sat(f.loan.installment_satang),
+    // ว่าง = ไม่ส่งไปเลย ให้ engine ใช้ค่างวดตั้งต้นตลอดสัญญา
+    ...(f.installmentSteps.length > 0 ? { installmentSteps: f.installmentSteps } : {}),
     prepayMode: f.loan.prepay_mode,
   }
 }

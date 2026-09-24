@@ -60,8 +60,24 @@ export type LoanTerms = {
   /** เรียงตาม effectiveFrom แถวแรกต้องครอบ startDate */
   conventions: readonly LoanConvention[]
 
+  /** ค่างวดตั้งต้น ใช้เมื่อไม่มี installmentSteps ครอบงวดนั้น */
   installmentSatang: Satang
+  /**
+   * ค่างวดที่ต่างกันตามช่วง เช่น โปรปี 1-3 ค่างวดหนึ่ง พ้นโปรอีกค่างวดหนึ่ง
+   * ⚠️ ธนาคารไทยมักคิดค่างวดช่วงโปรต่ำกว่าช่วงลอยตัว ถ้าใช้ค่าเดียวทั้งสัญญา
+   *    ตารางจะเพี้ยนตั้งแต่งวดที่พ้นโปรเป็นต้นไป
+   * ว่างไว้ = ใช้ installmentSatang ตลอดสัญญา (สัญญาเก่าที่บันทึกไว้ก่อนมีฟีเจอร์นี้)
+   */
+  installmentSteps?: readonly InstallmentStep[]
   prepayMode: 'shorten_term' | 'reduce_installment'
+}
+
+/** ช่วงค่างวด ใช้โครงเดียวกับ RateStep เพื่อให้จับคู่กับช่วงอัตราได้ตรง ๆ */
+export type InstallmentStep = {
+  fromMonth: number
+  /** null = จนจบสัญญา */
+  toMonth: number | null
+  amountSatang: Satang
 }
 
 // ---------- เหตุการณ์การจ่าย ----------

@@ -17,7 +17,7 @@ import {
 } from './money.js'
 import { accrueInterest } from './accrual.js'
 import {
-  findRateStep, resolveRate, resolveConvention, changePointsWithin,
+  findInstallment, findRateStep, resolveRate, resolveConvention, changePointsWithin,
 } from './rates.js'
 import { actualDueDate, nominalDueDate, type DateRuleConfig } from './schedule-dates.js'
 import { resolvePrepayOn, type PrepayPlan } from './prepay.js'
@@ -142,7 +142,8 @@ export function buildSchedule(
       actualCursor++
     }
 
-    let payment = recorded ?? toFixed(terms.installmentSatang)
+    const scheduled = findInstallment(terms.installmentSteps, period, terms.installmentSatang)
+    let payment = recorded ?? toFixed(scheduled)
     if (recorded !== null) flags.push('actual_payment')
 
     const payoff = add(balance, accruedTotal)

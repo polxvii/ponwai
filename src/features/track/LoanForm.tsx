@@ -47,6 +47,12 @@ export function LoanForm({
     set({ promoRates: next })
   }
 
+  const setPromoPay = (i: number, v: number | '') => {
+    const next = [...d.promoInstallments]
+    next[i] = v
+    set({ promoInstallments: next })
+  }
+
   async function save() {
     if (errors.length > 0) return setShowErrors(true)
     setBusy(true)
@@ -136,7 +142,11 @@ export function LoanForm({
           <Field label="วงเงินที่เบิกจริง" suffix="บาท" hint="ยอดที่ได้รับจริง รวมเบี้ยที่รวมในวงเงินแล้ว">
             <NumberField value={d.disbursed} onChange={(v) => set({ disbursed: v })} />
           </Field>
-          <Field label="ค่างวดตามสัญญา" suffix="บาท">
+          <Field
+            label="ค่างวดตามสัญญา"
+            suffix="บาท"
+            hint="ถ้าแต่ละช่วงไม่เท่ากัน กรอกแยกได้ในหัวข้ออัตราดอกเบี้ยด้านล่าง"
+          >
             <NumberField value={d.installment} onChange={(v) => set({ installment: v })} />
           </Field>
           <Field label="ระยะเวลา" suffix="ปี">
@@ -160,22 +170,44 @@ export function LoanForm({
       </section>
 
       <section className="mt-6">
-        <h3 className="mb-3 text-row">อัตราดอกเบี้ย</h3>
-        <div className="grid grid-cols-3 gap-2">
+        <h3 className="mb-1 text-row">อัตราดอกเบี้ยและค่างวดของแต่ละช่วง</h3>
+        <p className="mb-3 text-meta text-[var(--color-ink-2)]">
+          ค่างวดเว้นว่างได้ ถ้าเว้นจะใช้ &quot;ค่างวดตามสัญญา&quot; ด้านบนสำหรับช่วงนั้น
+        </p>
+
+        {/* จับคู่เรตกับค่างวดไว้ในแถวเดียวกัน เพราะใบเสนอของธนาคารก็เขียนมาคู่กันแบบนี้ */}
+        <div className="space-y-3">
           {d.promoRates.map((r, i) => (
-            <Field key={i} label={`ปีที่ ${i + 1}`} suffix="%">
-              <NumberField value={r} onChange={(v) => setRate(i, v)} />
-            </Field>
+            <div key={i} className="grid grid-cols-2 gap-2">
+              <Field label={`ปีที่ ${i + 1}`} suffix="%">
+                <NumberField value={r} onChange={(v) => setRate(i, v)} />
+              </Field>
+              <Field label={`ค่างวดปีที่ ${i + 1}`} suffix="บาท">
+                <NumberField
+                  value={d.promoInstallments[i] ?? ''}
+                  placeholder={d.installment === '' ? '' : String(d.installment)}
+                  onChange={(v) => setPromoPay(i, v)}
+                />
+              </Field>
+            </div>
           ))}
-        </div>
-        <div className="mt-3">
-          <Field
-            label="หลังพ้นโปร"
-            suffix="%"
-            hint={`กินเวลา ${Math.max(0, d.termYears - d.promoRates.filter((r) => typeof r === 'number').length)} ปีจาก ${d.termYears}`}
-          >
-            <NumberField value={d.floatingRate} onChange={(v) => set({ floatingRate: v })} />
-          </Field>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Field
+              label="หลังพ้นโปร"
+              suffix="%"
+              hint={`กินเวลา ${Math.max(0, d.termYears - d.promoRates.filter((r) => typeof r === 'number').length)} ปีจาก ${d.termYears}`}
+            >
+              <NumberField value={d.floatingRate} onChange={(v) => set({ floatingRate: v })} />
+            </Field>
+            <Field label="ค่างวดหลังพ้นโปร" suffix="บาท">
+              <NumberField
+                value={d.floatingInstallment}
+                placeholder={d.installment === '' ? '' : String(d.installment)}
+                onChange={(v) => set({ floatingInstallment: v })}
+              />
+            </Field>
+          </div>
         </div>
       </section>
 

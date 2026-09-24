@@ -7,8 +7,10 @@
  */
 
 import type { ISODate } from './date.js'
-import { bps, type Bps } from './money.js'
-import type { RateStep, ReferenceRate, IndexCode, LoanConvention } from './types.js'
+import { bps, type Bps, type Satang } from './money.js'
+import type {
+  InstallmentStep, RateStep, ReferenceRate, IndexCode, LoanConvention,
+} from './types.js'
 
 export function findRateStep(steps: readonly RateStep[], period: number): RateStep {
   for (const s of steps) {
@@ -17,6 +19,24 @@ export function findRateStep(steps: readonly RateStep[], period: number): RateSt
   const last = steps[steps.length - 1]
   if (!last) throw new Error('ต้องมี RateStep อย่างน้อย 1 ตัว')
   return last
+}
+
+/**
+ * ค่างวดของงวดนี้ — ไม่มีช่วงไหนครอบก็ใช้ค่าตั้งต้น
+ *
+ * ⚠️ ต่างจาก findRateStep ตรงที่ "ไม่มีข้อมูล" เป็นเรื่องปกติ ไม่ใช่ความผิดพลาด
+ *    สัญญาที่บันทึกไว้ก่อนมีค่างวดหลายช่วงจะไม่มี steps เลย ต้องคืนค่าตั้งต้นเงียบ ๆ
+ */
+export function findInstallment(
+  steps: readonly InstallmentStep[] | undefined,
+  period: number,
+  fallback: Satang,
+): Satang {
+  if (!steps) return fallback
+  for (const s of steps) {
+    if (period >= s.fromMonth && (s.toMonth === null || period <= s.toMonth)) return s.amountSatang
+  }
+  return fallback
 }
 
 /**

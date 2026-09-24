@@ -6,7 +6,7 @@
  *    จนกว่าจะเทียบกับใบแจ้งยอดจริงแล้ว
  */
 
-import { baht, bps } from '@engine/money.js'
+import { baht, bps, type Satang } from '@engine/money.js'
 import { isoDate, type ISODate } from '@engine/date.js'
 import type { DateRoll, RollCalendar } from '@engine/types.js'
 import type { DayCountBasis } from '@engine/accrual.js'
@@ -36,6 +36,13 @@ export type LoanDraft = {
 
   promoRates: (number | '')[]
   floatingRate: number | ''
+  /**
+   * ค่างวดของแต่ละช่วง เว้นว่าง = ใช้ "ค่างวดตามสัญญา" ด้านบน
+   * ธนาคารไทยมักคิดค่างวดช่วงโปรต่ำกว่าช่วงลอยตัว ถ้าบังคับใช้ค่าเดียว
+   * ตารางจะเพี้ยนตั้งแต่งวดที่พ้นโปรเป็นต้นไป
+   */
+  promoInstallments: (number | '')[]
+  floatingInstallment: number | ''
 
   dayCountBasis: DayCountBasis
   rounding: RoundingMode
@@ -59,6 +66,8 @@ export function emptyLoanDraft(today: ISODate): LoanDraft {
     installment: '',
     prepayMode: 'shorten_term',
     promoRates: ['', '', ''],
+    promoInstallments: ['', '', ''],
+    floatingInstallment: '',
     floatingRate: '',
     dayCountBasis: 'ACT/365F',
     rounding: 'round_satang',
@@ -95,6 +104,10 @@ export function validateDraft(d: LoanDraft): string[] {
   return errors
 }
 
+/** เว้นว่าง = ไม่กำหนดค่างวดเฉพาะช่วง ให้ตกไปใช้ค่างวดตั้งต้น */
+const payOf = (v: number | '' | undefined): Satang | null =>
+  typeof v === 'number' && v > 0 ? baht(Math.round(v * 100) / 100) : null
+
 export function toNewLoanInput(d: LoanDraft): NewLoanInput {
   const promo = d.promoRates
     .filter((r): r is number => typeof r === 'number')
@@ -116,6 +129,11 @@ export function toNewLoanInput(d: LoanDraft): NewLoanInput {
     prepayMode: d.prepayMode,
     promoRatesBps: promo,
     floatingRateBps: bps(Math.round(num(d.floatingRate) * 100)),
+    // ส่งเฉพาะช่วงที่มีเรตจริง ให้ยาวตรงกับ promoRatesBps เสมอ
+    promoInstallmentsSatang: d.promoRates
+      .map((r, i) => (typeof r === 'number' ? payOf(d.promoInstallments[i]) : null))
+      .filter((_, i) => typeof d.promoRates[i] === 'number'),
+    floatingInstallmentSatang: payOf(d.floatingInstallment),
     dayCountBasis: d.dayCountBasis,
     rounding: d.rounding,
     capitaliseUnpaidInterest: d.capitaliseUnpaidInterest,
@@ -141,6 +159,10 @@ export function toLoanDraft(full: LoanFull): LoanDraft {
   const promoRates: (number | '')[] = [0, 1, 2].map((i) => promo[i] ?? '')
 
   const conv = full.conventions[0]
+  const payAt = (from: number): number | '' => {
+    const hit = full.installmentSteps.find((st) => st.fromMonth === from)
+    return hit ? Number(hit.amountSatang) / 100 : ''
+  }
 
   return {
     propertyName: full.propertyName,
@@ -157,6 +179,8 @@ export function toLoanDraft(full: LoanFull): LoanDraft {
     installment: l.installment_satang / 100,
     prepayMode: l.prepay_mode,
     promoRates,
+    promoInstallments: [0, 1, 2].map((i) => payAt(i * 12 + 1)),
+    floatingInstallment: floatingStep ? payAt(floatingStep.fromMonth) : '',
     floatingRate: floatingStep ? fixedBps(floatingStep) : '',
     dayCountBasis: conv?.dayCountBasis ?? 'ACT/365F',
     rounding: conv?.rounding ?? 'round_satang',
