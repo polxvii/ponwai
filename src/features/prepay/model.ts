@@ -64,6 +64,24 @@ export function amountAt(d: PrepayDraft, year: number, month: number): number {
   return 0
 }
 
+/**
+ * ปีนี้กำลังแสดงยอดที่ทำซ้ำมาจากปีฐาน ไม่ใช่ยอดที่ผู้ใช้ตั้งไว้เองในปีนี้
+ *
+ * ⚠️ ต้องบอกผู้ใช้ตรงที่ปฏิทิน ไม่ใช่ให้เดาเอง
+ *    ค่าตั้งต้นคือทำซ้ำทุกปีจนปิดหนี้ ใส่ยอดใน ต.ค.–ธ.ค. ปีเดียว
+ *    แล้วเลื่อนไปปีหน้าเห็นยอดเดิมโผล่มาเองโดยไม่มีอะไรอธิบาย
+ */
+export function isRepeatedFromBase(d: PrepayDraft, year: number): boolean {
+  if (year === d.baseYear) return false
+  if (d.overrides[year] !== undefined) return false
+  return coversYear(d, year) && Object.values(d.months).some((v) => v > 0)
+}
+
+/** ปีฐานมียอดที่จะถูกทำซ้ำไปปีอื่นหรือยัง */
+export function baseRepeatsForward(d: PrepayDraft): boolean {
+  return d.repeatMode !== 'single_year' && Object.values(d.months).some((v) => v > 0)
+}
+
 function coversYear(d: PrepayDraft, y: number): boolean {
   if (y < d.baseYear) return false
   switch (d.repeatMode) {

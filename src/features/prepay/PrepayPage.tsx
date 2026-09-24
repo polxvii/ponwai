@@ -28,7 +28,7 @@ import {
 import {
   MONTH_NAMES, PRESET_CHIPS,
   amountAt, bumpMonths, clearYearOverride, copyYear, emptyDraft, fromPlan, monthRange,
-  newLump, setMonths, toPlan,
+  baseRepeatsForward, isRepeatedFromBase, newLump, setMonths, toPlan,
   type PrepayDraft,
 } from './model'
 
@@ -163,6 +163,17 @@ export function PrepayPage({
     // หนี้ที่ยังเหลือเมื่อครบอายุสัญญา ถ้าจ่ายแต่ค่างวด — ใช้แทนตัวเลข "เร็วขึ้น" ที่เทียบไม่ได้
     const atTerm = contractOnly.rows.find((r) => r.index === terms.termMonths)
 
+    /**
+     * หนี้ ณ งวดเดียวกัน ถ้าไม่เคยโปะเลย
+     *
+     * ⚠️ นี่คือคำตอบของ "ที่โปะไปแล้วมีผลแค่ไหน" ที่คำนวณได้เสมอ
+     *    เพราะเทียบที่จุดเวลาเดียวกัน ไม่ต้องรอให้ทั้งสองฝั่งมีวันปิดหนี้
+     *    ต่างจาก "เร็วขึ้นกี่ปี" ที่ต้องมีวันปิดหนี้ทั้งคู่ถึงจะลบกันได้
+     */
+    const balanceNowIfNeverPrepaid = contractOnly.rows.find((r) => r.index === settled)
+      ?.balanceAfterFixed
+    const balanceNowActual = baseline.rows.find((r) => r.index === settled)?.balanceAfterFixed
+
     return {
       settled,
       interestSavedSoFarFixed: (interestUpTo(contractOnly.rows, settled) -
@@ -175,6 +186,16 @@ export function PrepayPage({
       interestSavedLifetimeFixed: (contractOnly.totalInterestFixed -
         baseline.totalInterestFixed) as Fixed,
       balanceAtTermFixed: atTerm?.balanceAfterFixed ?? null,
+      // ดอกเบี้ยต่องวดหลังพ้นโปร เทียบกับค่างวด — สาเหตุที่หนี้ไม่ลด บอกเป็นตัวเลขได้
+      interestPerPeriodFixed: atTerm?.interestFixed ?? null,
+      installmentAtTermFixed: atTerm
+        ? toFixed(findInstallment(terms.installmentSteps, atTerm.index, terms.installmentSatang))
+        : null,
+      balanceNowIfNeverPrepaidFixed: balanceNowIfNeverPrepaid ?? null,
+      debtAvoidedNowFixed:
+        balanceNowIfNeverPrepaid !== undefined && balanceNowActual !== undefined
+          ? ((balanceNowIfNeverPrepaid - balanceNowActual) as Fixed)
+          : null,
     }
   }, [terms, baseline, events, today])
 
@@ -308,17 +329,31 @@ export function PrepayPage({
                   tone="principal"
                   sub={`ใน ${done.settled} งวดที่ผ่านมา`}
                 />
-                <Stat
-                  k="ปิดหนี้เร็วขึ้นแล้ว"
-                  v={
-                    done.comparable && done.periodsSaved > 0
-                      ? formatDuration(done.periodsSaved)
-                      : '—'
-                  }
-                  {...(done.comparable
-                    ? { sub: `ประหยัดดอกทั้งสัญญา ${bahtRounded(done.interestSavedLifetimeFixed)}` }
-                    : {})}
-                />
+                {/* ⛔ "เร็วขึ้นกี่ปี" ต้องมีวันปิดหนี้ทั้งสองฝั่งถึงจะลบกันได้
+                    ค่างวดไม่พอปิดหนี้ = ฝั่งสัญญาไม่มีวันจบ ไม่มีเลขให้ลบ
+                    แต่คำถามเดิม "ที่โปะไปแล้วมีผลแค่ไหน" ยังตอบได้
+                    ถ้าเปลี่ยนหน่วยคำตอบจากปีเป็นหนี้ที่หายไป ณ วันนี้ */}
+                {done.comparable && done.periodsSaved > 0 ? (
+                  <Stat
+                    k="ปิดหนี้เร็วขึ้นแล้ว"
+                    v={formatDuration(done.periodsSaved)}
+                    sub={`ประหยัดดอกทั้งสัญญา ${bahtRounded(done.interestSavedLifetimeFixed)}`}
+                  />
+                ) : (
+                  <Stat
+                    k="หนี้วันนี้น้อยลง"
+                    v={
+                      done.debtAvoidedNowFixed === null
+                        ? '—'
+                        : bahtRounded(done.debtAvoidedNowFixed)
+                    }
+                    {...(done.balanceNowIfNeverPrepaidFixed === null
+                      ? {}
+                      : {
+                          sub: `ถ้าไม่โปะเลยวันนี้จะเป็นหนี้ ${bahtRounded(done.balanceNowIfNeverPrepaidFixed)}`,
+                        })}
+                  />
+                )}
               </div>
 
               {/* ⛔ ค่างวดไม่พอปิดหนี้ = ไม่มีตัวเลข "เร็วขึ้น" ให้เทียบจริง ๆ
@@ -326,17 +361,20 @@ export function PrepayPage({
                   เป็นตัวเลขที่มีอยู่จริงและบอกความร้ายแรงได้ตรงกว่าจำนวนปี */}
               {!done.comparable && (
                 <p className="mt-3 text-micro text-[var(--color-panel-ink-3)]">
-                  จ่ายแค่ค่างวดตามสัญญาอย่างเดียว ดอกเบี้ยหลังพ้นโปรโตเร็วกว่าเงินต้นที่ตัดได้
-                  หนี้จึงไม่มีวันหมด
-                  {done.balanceAtTermFixed !== null && (
+                  {done.interestPerPeriodFixed !== null && done.installmentAtTermFixed !== null ? (
                     <>
-                      {' '}(ครบ {formatDuration(terms.termMonths)}แล้วยังเหลือหนี้อีก{' '}
-                      {bahtRounded(done.balanceAtTermFixed)})
+                      หลังพ้นโปร ดอกเบี้ยงวดละ {bahtRounded(done.interestPerPeriodFixed)} แต่ค่างวดมี{' '}
+                      {bahtRounded(done.installmentAtTermFixed)} เงินต้นจึงไม่ถูกตัดเลย
+                      จ่ายตามสัญญาอย่างเดียวหนี้จะไม่ลดไม่ว่าผ่านไปกี่ปี
                     </>
+                  ) : (
+                    <>จ่ายแค่ค่างวดตามสัญญาอย่างเดียว เงินต้นไม่ถูกตัด หนี้จึงไม่ลดไม่ว่าผ่านไปกี่ปี</>
                   )}{' '}
-                  ไม่มีวันปิดหนี้ให้เอามาเทียบว่าเร็วขึ้นเท่าไหร่ —
+                  จึงไม่มี &quot;กี่ปี&quot; ให้เอามาลบกัน —
                   เงินที่โปะมาคือสิ่งที่ทำให้สัญญานี้ปิดได้จริงใน{' '}
                   {formatDuration(baseline.rows.length)} นับจากงวดแรก
+                  {' '}ถ้าจริง ๆ ธนาคารขึ้นค่างวดหลังพ้นโปร ใส่ไว้ในช่อง &quot;ค่างวดหลังพ้นโปร&quot;
+                  ที่หน้าแก้ไขสัญญา แล้วตัวเลขนี้จะคำนวณได้
                 </p>
               )}
             </div>
@@ -446,6 +484,23 @@ export function PrepayPage({
           }}
         />
       </div>
+
+      {/* บอกที่มาของยอดตรงที่ยอดโผล่ ไม่ใช่ปล่อยให้ไปเจอตัวเลือก "ทำซ้ำแบบ" ใต้ปฏิทินเอง */}
+      {view === 'calendar' && isRepeatedFromBase(draft, editingYear) && (
+        <p className="mt-3 text-meta text-[var(--color-ink-2)]">
+          ยอดของปีนี้ทำซ้ำมาจากแผนฐานปี {draft.baseYear + 543} — แก้ตรงนี้ได้
+          จะกลายเป็นยอดเฉพาะปีนี้ ถ้าไม่อยากให้ทำซ้ำ เปลี่ยนที่ &quot;ทำซ้ำแบบ&quot; ใต้ปฏิทิน
+        </p>
+      )}
+      {view === 'calendar' && editingYear === draft.baseYear && baseRepeatsForward(draft) && (
+        <p className="mt-3 text-meta text-[var(--color-ink-2)]">
+          ยอดที่ตั้งในปีนี้คือแผนฐาน จะถูกใช้ซ้ำ
+          {draft.repeatMode === 'repeat_forever'
+            ? ' ทุกปีจนปิดหนี้'
+            : ` ถึงปี ${typeof draft.repeatUntilYear === 'number' ? draft.repeatUntilYear + 543 : '—'}`}{' '}
+          — เปลี่ยนได้ที่ &quot;ทำซ้ำแบบ&quot; ใต้ปฏิทิน
+        </p>
+      )}
 
       {view === 'calendar' ? (
         <CalendarView
