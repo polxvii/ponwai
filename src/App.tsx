@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Logo } from './components/Logo'
 import { AppBanners } from './components/AppBanners'
 import { AuthProvider, useAuth, signOut } from './lib/auth'
@@ -34,8 +34,25 @@ export function App() {
 }
 
 function Shell() {
-  const [tab, setTab] = useState<Tab>('compare')
+  const { user, loading } = useAuth()
+  /** null = ยังไม่ได้เลือกแท็บตั้งต้น เพราะยังอ่าน session ไม่เสร็จ */
+  const [tab, setTab] = useState<Tab | null>(null)
   const [signingIn, setSigningIn] = useState(false)
+
+  /**
+   * ล็อกอินอยู่แล้วให้เริ่มที่ "ติดตาม" — คนที่มีสัญญาบันทึกไว้แล้ว
+   * แทบไม่ได้กลับไปใช้อีกสองแท็บจนกว่าจะถึงรอบรีไฟแนนซ์
+   *
+   * ⛔ ห้ามตั้งเป็นค่าตั้งต้นตั้งแต่ render แรก
+   *    ตอนนั้น loading ยังเป็น true จะได้ compare เสมอแล้วค่อยเด้งไป track
+   *    เห็นเป็นหน้ากระพริบทุกครั้งที่เปิดแอพ
+   * ⛔ และตั้งครั้งเดียวเท่านั้น (เช็ค tab !== null)
+   *    ไม่งั้นพอผู้ใช้ล็อกอินระหว่างกรอกเปรียบเทียบอยู่ จะถูกดึงออกจากงานที่ทำค้าง
+   */
+  useEffect(() => {
+    if (loading || tab !== null) return
+    setTab(user ? 'track' : 'compare')
+  }, [loading, user, tab])
 
   return (
     <>
@@ -79,9 +96,17 @@ function Shell() {
         </div>
       </nav>
 
-      {tab === 'compare' && <ComparePage />}
-      {tab === 'refinance' && <RefinancePage />}
-      {tab === 'track' && <TrackPage onSignIn={() => setSigningIn(true)} />}
+      {tab === null ? (
+        <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
+          <p className="text-[var(--color-ink-2)]">กำลังเปิด…</p>
+        </div>
+      ) : (
+        <>
+          {tab === 'compare' && <ComparePage />}
+          {tab === 'refinance' && <RefinancePage />}
+          {tab === 'track' && <TrackPage onSignIn={() => setSigningIn(true)} />}
+        </>
+      )}
 
       {signingIn && <SignInDialog onClose={() => setSigningIn(false)} />}
       <AppBanners />
