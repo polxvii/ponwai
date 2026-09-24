@@ -13,6 +13,11 @@ import {
   type RefinanceContext, type RefinanceScenario,
 } from '@engine/refinance.js'
 import type { RateStep } from '@engine/types.js'
+import { buildSchedule } from '@engine/schedule.js'
+import { findInstallment, findRateStep, resolveRate } from '@engine/rates.js'
+import { FIXED_SCALE } from '@engine/money.js'
+import { balanceOn, settledPeriods } from '@/lib/progress'
+import { toLoanTerms, toPaymentEvents, type LoanFull } from '@/lib/db'
 import { mergeShape } from '@/lib/persist'
 import { NO_BANK, OTHER_BANK, bankName, promoGap } from '../compare/model'
 
@@ -343,4 +348,47 @@ export const reviveRefi = (raw: unknown) => {
   const merged = mergeShape(raw, EMPTY_REFI)
   if (merged && !Array.isArray(merged.promoRates)) merged.promoRates = EMPTY_REFI.promoRates
   return merged
+}
+
+// ---------- ดึงจากสัญญาที่ติดตามอยู่ ----------
+
+/**
+ * ช่องที่ดึงจากสัญญาที่บันทึกไว้ได้
+ *
+ * ⛔ ไม่มี lockinLeftMonths กับ penaltyPct โดยตั้งใจ
+ *    สองค่านี้อยู่ในสัญญากระดาษ ไม่ได้อยู่ในระบบ เดาแทนไม่ได้
+ *    และมันคือตัวชี้ขาดว่าย้ายคุ้มไหม การเติม 0 ให้เงียบ ๆ
+ *    เท่ากับบอกว่า "ไถ่ถอนฟรี" ทั้งที่ยังไม่มีใครตรวจ
+ */
+export type CurrentPrefill = Pick<
+  CurrentLoan,
+  'balance' | 'asOf' | 'dueDayOfMonth' | 'installment' | 'currentRate' | 'remainingMonths'
+>
+
+/**
+ * แปลงสัญญาที่ติดตามอยู่ เป็นค่าตั้งต้นของ "หนี้ที่ผ่อนอยู่"
+ *
+ * ⚠️ ต้องคิดจากตารางที่รวมการจ่ายจริงแล้ว ไม่ใช่ตัวเลขดิบในตาราง active_loans
+ *    ยอดคงเหลือกับงวดที่เหลือของคนที่โปะมาแล้ว ต่างจากสัญญาตั้งต้นคนละเรื่อง
+ *    ใช้ settledPeriods ตัวเดียวกับหน้าสัญญา จะได้ไม่ขัดกันเองสองหน้า
+ */
+export function currentFromLoan(full: LoanFull, today: ISODate): CurrentPrefill {
+  const terms = toLoanTerms(full)
+  const events = toPaymentEvents(full)
+  const { rows } = buildSchedule(terms, events)
+
+  const settled = settledPeriods(rows, events, today)
+  // ค่างวดกับเรตของ "งวดถัดไป" ไม่ใช่ของงวดแรกของสัญญา — สัญญาแบ่งช่วงไว้
+  const next = Math.min(settled + 1, Math.max(1, rows.length))
+  const step = findRateStep(terms.rateSteps, next)
+
+  return {
+    balance: Number(balanceOn(rows, events, today, terms.principalSatang) / FIXED_SCALE) / 100,
+    asOf: today,
+    dueDayOfMonth: full.loan.due_day_of_month,
+    installment:
+      Number(findInstallment(terms.installmentSteps, next, terms.installmentSatang)) / 100,
+    currentRate: Number(resolveRate(step, terms.referenceRates, today)) / 100,
+    remainingMonths: Math.max(0, rows.length - settled),
+  }
 }

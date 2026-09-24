@@ -5,7 +5,7 @@
  * ⛔ ห้ามตัด "ไม่ทำอะไร" ออกจากตาราง — เป็น baseline เดียวที่บอกได้ว่าย้ายแล้วคุ้มจริงไหม
  */
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { compareRefinanceOptions, recommend, type RefinanceOutcome } from '@engine/refinance.js'
 import type { Satang } from '@engine/money.js'
 import { isoDate } from '@engine/date.js'
@@ -16,8 +16,10 @@ import { todayISO } from '../track/model'
 import { baht, bahtRounded, formatDuration, formatThaiDate } from '@/lib/format'
 import { BANK_OPTIONS, OTHER_BANK } from '../compare/model'
 import { InterestCurveChart } from './InterestCurveChart'
+import { useAuth } from '@/lib/auth'
+import { getLoanFull, listLoans, type LoanListItem } from '@/lib/db'
 import {
-  emptyCurrent, EMPTY_RETENTION, EMPTY_REFI,
+  currentFromLoan, emptyCurrent, EMPTY_RETENTION, EMPTY_REFI,
   buildScenarios, contextOf, penaltyOf, refiMissing, refiMovingCost, refiReady,
   refiWarnings, retentionUsable,
   reviveCurrent, reviveRetention, reviveRefi,
@@ -93,6 +95,7 @@ export function RefinancePage() {
             value={current}
             onChange={(p) => setCurrent({ ...current, ...p })}
             penalty={penalty}
+            onPull={(p) => setCurrent({ ...current, ...p })}
           />
           <RetentionForm value={retention} onChange={(p) => setRetention({ ...retention, ...p })} />
           <RefiForm value={refi} onChange={(p) => setRefi({ ...refi, ...p })} movingCost={moving} />
@@ -341,18 +344,101 @@ function Td({ children, tone }: { children: React.ReactNode; tone?: 'warn' | 'ok
 
 // ---------- ฟอร์ม ----------
 
+/**
+ * ดึงยอดจากสัญญาที่ติดตามอยู่ มาเป็นค่าตั้งต้น
+ *
+ * ⚠️ หน้านี้ใช้ได้โดยไม่ต้องล็อกอิน (ข้อ 2A) ตัวดึงจึงต้องหายไปเงียบ ๆ
+ *    เมื่อยังไม่ล็อกอินหรือยังไม่มีสัญญา ห้ามขึ้นกล่องชวนล็อกอินคั่นกลางฟอร์ม
+ * ⚠️ ล้มเหลวก็ต้องไม่พังทั้งหน้า — กรอกเองได้อยู่แล้ว การดึงเป็นแค่ทางลัด
+ */
+function PullFromTracked({ onPull }: { onPull: (p: Partial<CurrentLoan>) => void }) {
+  const { user, loading } = useAuth()
+  const [loans, setLoans] = useState<LoanListItem[]>([])
+  const [picked, setPicked] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [pulledFrom, setPulledFrom] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!user) return setLoans([])
+    let alive = true
+    listLoans()
+      .then((all) => alive && setLoans(all.filter((l) => l.status === 'active')))
+      .catch(() => alive && setLoans([]))
+    return () => {
+      alive = false
+    }
+  }, [user])
+
+  if (loading || !user || loans.length === 0) return null
+
+  const target = picked === '' ? loans[0] : loans.find((l) => l.loanId === picked)
+
+  async function pull() {
+    if (!target) return
+    setBusy(true)
+    setError(null)
+    try {
+      onPull(currentFromLoan(await getLoanFull(target.loanId), TODAY))
+      setPulledFrom(target.propertyName)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mb-4 rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="min-w-[160px] flex-1">
+          <Field label="ดึงจากสัญญาที่ติดตามอยู่">
+            <SelectField
+              value={target?.loanId ?? ''}
+              onChange={setPicked}
+              options={loans.map((l) => ({
+                value: l.loanId,
+                label: `${l.propertyName} · ${l.bankLabel}`,
+              }))}
+            />
+          </Field>
+        </div>
+        <button
+          onClick={() => void pull()}
+          disabled={busy || !target}
+          className="tap shrink-0 rounded-md border border-[var(--color-interest)] px-3 py-2 text-meta text-[var(--color-interest)] disabled:opacity-50"
+        >
+          {busy ? 'กำลังดึง…' : 'ใช้ข้อมูลนี้'}
+        </button>
+      </div>
+
+      {error && <p className="mt-2 text-meta text-[var(--color-warn)]">{error}</p>}
+
+      <p className="mt-2 text-micro text-[var(--color-ink-3)]">
+        {pulledFrom === null
+          ? 'เติมยอดคงเหลือ ค่างวด เรต และงวดที่เหลือให้ แก้ต่อได้ทุกช่อง'
+          : `เติมจาก ${pulledFrom} แล้ว — แก้ต่อได้ทุกช่อง`}
+        {' '}ส่วน lock-in กับค่าปรับไถ่ถอนอยู่ในสัญญากระดาษ ระบบไม่มีข้อมูล ต้องกรอกเอง
+      </p>
+    </div>
+  )
+}
+
 function CurrentLoanForm({
   value: c,
   onChange,
   penalty,
+  onPull,
 }: {
   value: CurrentLoan
   onChange: (p: Partial<CurrentLoan>) => void
   penalty: Satang
+  onPull: (p: Partial<CurrentLoan>) => void
 }) {
   return (
     <section>
       <h2 className="mb-3 text-row">หนี้ที่ผ่อนอยู่</h2>
+      <PullFromTracked onPull={onPull} />
       <div className="grid grid-cols-2 gap-3">
         <Field label="ยอดคงเหลือวันนี้" suffix="บาท">
           <NumberField value={c.balance} onChange={(v) => onChange({ balance: v })} />
