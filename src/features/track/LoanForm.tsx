@@ -14,7 +14,7 @@ import { createLoan, updateLoan } from '@/lib/db'
 import { BANK_OPTIONS, OTHER_BANK } from '../compare/model'
 import {
   DATE_ROLL_OPTIONS, DAY_COUNT_OPTIONS, ROLL_CALENDAR_OPTIONS, ROUNDING_OPTIONS,
-  emptyLoanDraft, todayISO, toNewLoanInput, validateDraft,
+  bandsCoverEveryPeriod, emptyLoanDraft, todayISO, toNewLoanInput, validateDraft,
   type LoanDraft,
 } from './model'
 
@@ -145,7 +145,11 @@ export function LoanForm({
           <Field
             label="ค่างวดตามสัญญา"
             suffix="บาท"
-            hint="ถ้าแต่ละช่วงไม่เท่ากัน กรอกแยกได้ในหัวข้ออัตราดอกเบี้ยด้านล่าง"
+            hint={
+              bandsCoverEveryPeriod(d)
+                ? 'กรอกค่างวดครบทุกช่วงแล้ว ช่องนี้เว้นว่างได้'
+                : 'ใช้กับช่วงที่เว้นค่างวดว่างไว้ด้านล่าง ถ้าแต่ละช่วงไม่เท่ากันให้กรอกแยกทีละช่วง'
+            }
           >
             <NumberField value={d.installment} onChange={(v) => set({ installment: v })} />
           </Field>

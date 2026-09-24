@@ -5,6 +5,7 @@ import { baht, formatFixedBaht, type Satang } from './money.js'
 import { isoDate } from './date.js'
 import { evaluatePrepayPlan } from './prepay-roi.js'
 import type { PrepayPlan } from './prepay.js'
+import type { PaymentEvent } from './types.js'
 
 const f0 = (v: bigint) => formatFixedBaht(v as never, 0)
 const s = (n: number): Satang => baht(n)
@@ -146,5 +147,58 @@ describe('ROI ของแผนโปะ (ข้อ 3.4)', () => {
     })
     const sumPrepay = withPlan.rows.reduce((a, x) => a + x.prepayFixed, 0n)
     expect(f0(r.totalPrepaidFixed)).toBe(f0(sumPrepay))
+  })
+})
+
+/**
+ * TV-43 — เงินโปะที่บันทึกว่าจ่ายไปแล้ว ต้องไม่ถูกนับเป็นเงินโปะของแผนใหม่
+ *
+ * เคสจริง: บ้านรังสิต บันทึก "โปะบางส่วน" ไว้ 350,000 พอเปิดหน้าวางแผนโปะ
+ * แผนยังว่าง แต่แผงสรุปอ่านว่า "ได้คืนต่อเงินโปะ 1 บาท = 0.00 บาท"
+ * เพราะตัวเศษเป็นผลต่างจากเส้นฐาน (= 0) ส่วนตัวหารเป็นยอดสะสม (= 350,000)
+ */
+describe('TV-43 เงินโปะของแผน = ส่วนต่างจากเส้นฐาน ไม่ใช่ยอดสะสม', () => {
+  const PREPAID: PaymentEvent[] = [
+    { date: isoDate('2026-06-15'), amountSatang: s(350_000), kind: 'partial_prepay' },
+  ]
+  // เส้นฐานของคนที่โปะไปแล้ว คือตารางที่นับการโปะนั้นไว้แล้ว
+  const paidBaseline = buildSchedule(TERMS, PREPAID)
+
+  it('โปะไปแล้ว 350,000 แต่ยังไม่วางแผนอะไร -> ทุกตัวเลขเป็นศูนย์ และ ROI เป็น null', () => {
+    const withPlan = buildSchedule(TERMS, PREPAID, planOf(0))
+    const r = evaluatePrepayPlan({
+      loanId: 'a',
+      baseline: paidBaseline,
+      withPlan,
+      otherLoans: [],
+      marginalTaxRateBps: null,
+    })
+    expect(r.periodsSaved).toBe(0)
+    expect(r.interestSavedFixed).toBe(0n)
+    expect(r.totalPrepaidFixed).toBe(0n)
+    // ⛔ ก่อนแก้ค่านี้เป็น 0 ทำให้หน้าจอโชว์ "0.00 บาท" เหมือนโปะแล้วไม่ได้อะไรเลย
+    expect(r.roiBps).toBeNull()
+  })
+
+  it('วางแผนโปะเพิ่มบนคนที่โปะไปแล้ว -> นับเฉพาะส่วนที่เพิ่ม', () => {
+    const withPlan = buildSchedule(TERMS, PREPAID, planOf(5_000))
+    const r = evaluatePrepayPlan({
+      loanId: 'a',
+      baseline: paidBaseline,
+      withPlan,
+      otherLoans: [],
+      marginalTaxRateBps: null,
+    })
+    const onlyPlan = evaluatePrepayPlan({
+      loanId: 'a',
+      baseline,
+      withPlan: buildSchedule(TERMS, [], planOf(5_000)),
+      otherLoans: [],
+      marginalTaxRateBps: null,
+    })
+    expect(r.totalPrepaidFixed).toBeGreaterThan(0n)
+    // 350,000 ที่โปะไปแล้วต้องไม่โผล่มาในตัวหาร — ยอดของแผนเท่านั้น
+    expect(r.totalPrepaidFixed).toBeLessThan(onlyPlan.totalPrepaidFixed)
+    expect(r.roiBps).not.toBeNull()
   })
 })

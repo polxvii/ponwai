@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { buildSchedule } from '@engine/schedule.js'
 import { groupSchedule, type GroupAxis } from '@engine/grouping.js'
+import { findInstallment } from '@engine/rates.js'
 import { addDays, daysBetween, type ISODate } from '@engine/date.js'
 import type { Fixed, Satang } from '@engine/money.js'
 import type { PaymentEvent, PaymentKind, ScheduleRow } from '@engine/types.js'
@@ -113,8 +114,22 @@ export function LoanDetail({
     )
   }
 
-  const { actual, plan, events } = computed
+  const { actual, plan, events, terms } = computed
   const rows = actual.rows
+
+  /**
+   * ค่างวดตามสัญญาของงวดที่วันนั้นตกอยู่
+   *
+   * อ่านจากตารางตามสัญญา ไม่ใช่ตารางจริง — ตารางจริงถูกยอดที่บันทึกไว้ทับไปแล้ว
+   * ถามว่า "งวดนี้ควรจ่ายเท่าไหร่" กับตารางที่มีคำตอบเป็นยอดที่จ่ายไปจริง จะได้ตัวเองกลับมา
+   */
+  const scheduledOn = (d: ISODate): number => {
+    const last = plan.rows[plan.rows.length - 1]
+    const hit =
+      plan.rows.find((r) => d > r.accrualFrom && d <= r.date) ??
+      (last && d > last.date ? last : plan.rows[0])
+    return Number(findInstallment(terms.installmentSteps, hit?.index ?? 1, terms.installmentSatang)) / 100
+  }
   // นับจาก "จ่ายจริงไปแล้วหรือยัง" ด้วย ไม่ใช่รอวันครบกำหนดอย่างเดียว
   const paidPeriods = settledPeriods(rows, events, today)
   const balanceNow = balanceOn(rows, events, today, item.disbursedSatang)
@@ -124,6 +139,11 @@ export function LoanDetail({
   const principalPaid = ((item.disbursedSatang * FIXED) - balanceNow) as Fixed
   const payoff = rows[rows.length - 1]
   const savedPeriods = plan.rows.length - rows.length
+  const installmentNext = findInstallment(
+    terms.installmentSteps,
+    Math.min(paidPeriods + 1, Math.max(1, plan.rows.length)),
+    terms.installmentSatang,
+  )
 
   return (
     <Wrapper onBack={onBack}>
@@ -168,7 +188,9 @@ export function LoanDetail({
         <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-1 text-meta sm:grid-cols-3">
           <PanelRow k="ผ่อนมาแล้ว" v={`${paidPeriods} งวด`} />
           <PanelRow k="ดอกเบี้ยที่จ่ายไป" v={bahtRounded(interestPaid)} />
-          <PanelRow k="ค่างวดตามสัญญา" v={baht(item.installmentSatang, 0)} />
+          {/* ค่างวดของงวดที่กำลังจะถึง ไม่ใช่ค่างวดตั้งต้นของสัญญา
+              สัญญาที่ค่างวดต่างกันตามช่วง ค่าตั้งต้นจะเป็นของปีแรกตลอดไป ซึ่งผิดตั้งแต่พ้นโปร */}
+          <PanelRow k="ค่างวดงวดถัดไป" v={baht(installmentNext, 0)} />
           <PanelRow
             k="ปิดหนี้"
             v={payoff ? formatThaiDate(payoff.date, 'monthYear') : '—'}
@@ -245,6 +267,7 @@ export function LoanDetail({
       {/* ---------- การจ่าย ---------- */}
       <PaymentSection
         full={full}
+        scheduledOn={scheduledOn}
         onChanged={() => setReloadKey((k) => k + 1)}
       />
 
@@ -306,6 +329,20 @@ function PanelRow({ k, v }: { k: string; v: string }) {
 
 // ---------- การจ่าย ----------
 
+/**
+ * เลือกประเภทยังไงเมื่อโอนครั้งเดียวรวมค่างวดกับเงินโปะ
+ *
+ * เครื่องคิดคนละแบบ: 'installment' แทนที่ค่างวดของงวดนั้นทั้งก้อน
+ * ส่วน 'partial_prepay' บวกเพิ่มจากค่างวดและตัดต้น ณ วันที่โอนจริง
+ * โอนรวมมาก้อนเดียวจึงต้องเป็น 'installment' — บันทึกซ้ำสองรายการจะตัดหนี้เกินจริง
+ */
+const KIND_HINTS: Record<PaymentKind | 'fee', string> = {
+  installment: 'โอนรวมค่างวดกับเงินโปะเป็นก้อนเดียว ใส่ยอดรวมที่นี่',
+  partial_prepay: 'ใช้เมื่อโอนเงินโปะแยกคนละวันกับวันตัดงวด',
+  full_redemption: 'ยอดปิดหนี้ทั้งก้อน ตารางจะจบที่งวดนี้',
+  fee: 'เช่น ค่าประเมิน ค่าจดจำนอง ไม่ถูกนำไปตัดหนี้',
+}
+
 const KIND_LABELS: readonly { value: PaymentKind | 'fee'; label: string }[] = [
   { value: 'installment', label: 'ค่างวดปกติ' },
   { value: 'partial_prepay', label: 'โปะบางส่วน' },
@@ -313,7 +350,16 @@ const KIND_LABELS: readonly { value: PaymentKind | 'fee'; label: string }[] = [
   { value: 'fee', label: 'ค่าธรรมเนียม (ไม่ตัดหนี้)' },
 ]
 
-function PaymentSection({ full, onChanged }: { full: LoanFull; onChanged: () => void }) {
+function PaymentSection({
+  full,
+  scheduledOn,
+  onChanged,
+}: {
+  full: LoanFull
+  /** ค่างวดตามสัญญา (บาท) ของงวดที่วันนั้นตกอยู่ — ใช้บอกผู้ใช้ว่าส่วนไหนคือเงินโปะ */
+  scheduledOn: (d: ISODate) => number
+  onChanged: () => void
+}) {
   const [open, setOpen] = useState(false)
   /** null = กำลังเพิ่มรายการใหม่ ไม่ใช่แก้ของเดิม */
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -325,6 +371,9 @@ function PaymentSection({ full, onChanged }: { full: LoanFull; onChanged: () => 
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  /** ค่างวดตามสัญญาของงวดที่วันที่จ่ายนี้ตกอยู่ — ส่วนที่เกินคือเงินโปะ */
+  const overDue = scheduledOn(paidDate)
 
   function startAdd() {
     setEditingId(null)
@@ -403,13 +452,23 @@ function PaymentSection({ full, onChanged }: { full: LoanFull; onChanged: () => 
             <Field label="จำนวนเงิน" suffix="บาท">
               <NumberField value={amount} onChange={setAmount} />
             </Field>
-            <Field label="ประเภท">
+            <Field label="ประเภท" hint={KIND_HINTS[kind]}>
               <SelectField value={kind} onChange={setKind} options={KIND_LABELS} />
             </Field>
             <Field label="หมายเหตุ">
               <TextField value={note} onChange={setNote} placeholder="เช่น โบนัสกลางปี" />
             </Field>
           </div>
+
+          {/* ⚠️ เงินโปะที่โอนรวมมากับค่างวดเป็นยอดเดียว ไม่ต้องแยกบันทึกอีกรายการ
+              ส่วนที่เกินค่างวดถูกตัดเงินต้นให้อยู่แล้ว แต่ไม่มีอะไรบนจอบอกผู้ใช้
+              จึงต้องยืนยันตรงนี้ ไม่งั้นผู้ใช้จะบันทึก "โปะบางส่วน" ซ้ำแล้วยอดหนี้หายไปสองเท่า */}
+          {kind === 'installment' && typeof amount === 'number' && amount > overDue && (
+            <p className="mt-3 text-meta text-[var(--color-principal-dark)]">
+              เกินค่างวด {Math.round(amount - overDue).toLocaleString('en-US')} บาท —
+              ส่วนนี้ตัดเงินต้นให้อัตโนมัติ ไม่ต้องบันทึกเป็น &quot;โปะบางส่วน&quot; ซ้ำอีกรายการ
+            </p>
+          )}
 
           {error && (
             <p className="mt-3 text-meta text-[var(--color-warn)]">{error}</p>

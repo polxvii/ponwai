@@ -82,6 +82,29 @@ export function loanBankName(d: LoanDraft): string {
 
 const num = (v: number | '' | undefined): number => (typeof v === 'number' ? v : 0)
 
+/**
+ * ทุกช่วงที่มีอัตราจริง กรอกค่างวดของตัวเองครบแล้วหรือยัง
+ *
+ * ครบ = ไม่มีงวดไหนต้องไปหยิบ "ค่างวดตามสัญญา" มาใช้ ช่องนั้นจึงเว้นว่างได้
+ * สัญญาที่ค่างวดไม่เท่ากันสักช่วงเดียว ไม่มีเลขไหนกรอกช่องนั้นได้อย่างไม่มั่ว
+ */
+export function bandsCoverEveryPeriod(d: LoanDraft): boolean {
+  const promoOk = d.promoRates.every(
+    (r, i) => typeof r !== 'number' || num(d.promoInstallments[i]) > 0,
+  )
+  return promoOk && num(d.floatingInstallment) > 0
+}
+
+/** ค่างวดของช่วงแรกสุดที่กรอกไว้ — เรียงตามลำดับเดียวกับที่ toNewLoanInput เขียนขั้นอัตรา */
+function firstBandInstallment(d: LoanDraft): number {
+  for (let i = 0; i < d.promoRates.length; i++) {
+    if (typeof d.promoRates[i] === 'number' && num(d.promoInstallments[i]) > 0) {
+      return num(d.promoInstallments[i])
+    }
+  }
+  return num(d.floatingInstallment)
+}
+
 /** ช่องที่ยังขาด — คืนข้อความว่าง = กรอกครบแล้ว */
 export function validateDraft(d: LoanDraft): string[] {
   const errors: string[] = []
@@ -91,7 +114,11 @@ export function validateDraft(d: LoanDraft): string[] {
   //    ต้องดักตั้งแต่ตรงนี้ ไม่ใช่รอให้ Postgres ปฏิเสธ
   if (d.bankCode === '') errors.push('เลือกธนาคาร')
   if (num(d.disbursed) <= 0) errors.push('กรอกวงเงินที่เบิกจริง')
-  if (num(d.installment) <= 0) errors.push('กรอกค่างวดตามสัญญา')
+  // ⚠️ เว้นช่องนี้ได้เมื่อกรอกค่างวดครบทุกช่วงแล้ว
+  //    บังคับกรอกทั้งที่ทุกช่วงมีค่างวดของตัวเอง = บังคับให้ผู้ใช้เดาเลขที่ไม่มีอยู่จริง
+  if (num(d.installment) <= 0 && !bandsCoverEveryPeriod(d)) {
+    errors.push('กรอกค่างวดตามสัญญา หรือกรอกค่างวดของทุกช่วงให้ครบ')
+  }
   if (!d.promoRates.some((r) => typeof r === 'number')) errors.push('กรอกอัตราดอกเบี้ยปีที่ 1')
   if (num(d.floatingRate) <= 0) errors.push('กรอกอัตราหลังพ้นโปร')
   if (d.dueDayOfMonth < 1 || d.dueDayOfMonth > 31) errors.push('วันตัดรอบต้องอยู่ระหว่าง 1–31')
@@ -113,6 +140,10 @@ export function toNewLoanInput(d: LoanDraft): NewLoanInput {
     .filter((r): r is number => typeof r === 'number')
     .map((r) => bps(Math.round(r * 100)))
 
+  // DB บังคับว่าค่างวดตั้งต้นต้อง > 0 เสมอ แต่ฟอร์มเว้นว่างได้ถ้ากรอกครบทุกช่วง
+  // กรณีนั้นไม่มีงวดไหนใช้ค่านี้ เก็บค่างวดช่วงแรกไว้เพื่อให้การ์ดสรุปมีเลขที่จ่ายจริงแสดง
+  const base = num(d.installment) > 0 ? num(d.installment) : firstBandInstallment(d)
+
   return {
     propertyName: d.propertyName.trim(),
     bankCode: d.bankCode === OTHER_BANK ? null : d.bankCode,
@@ -125,7 +156,7 @@ export function toNewLoanInput(d: LoanDraft): NewLoanInput {
     rollCalendar: d.rollCalendar,
     termMonths: d.termYears * 12,
     disbursedSatang: baht(Math.round(num(d.disbursed) * 100) / 100),
-    installmentSatang: baht(Math.round(num(d.installment) * 100) / 100),
+    installmentSatang: baht(Math.round(base * 100) / 100),
     prepayMode: d.prepayMode,
     promoRatesBps: promo,
     floatingRateBps: bps(Math.round(num(d.floatingRate) * 100)),

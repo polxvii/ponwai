@@ -19,6 +19,7 @@ import { daysBetween, year as yearOf, type ISODate } from '@engine/date.js'
 import { SplitRibbon } from '@/components/SplitRibbon'
 import { SplitBar, CapMeter } from '@/components/SplitBar'
 import { Field, SelectField } from '@/components/Field'
+import { SwipeX } from '@/components/SwipeX'
 import { baht, bahtRounded, formatDuration, formatThaiDate } from '@/lib/format'
 import { toLoanTerms, toPaymentEvents, type LoanFull, type LoanListItem } from '@/lib/db'
 import { BalanceChart, TaxChart, YearBarsChart } from './charts'
@@ -351,13 +352,17 @@ export function DashboardPage({
         {windowYears !== null && (
           <p className="mt-2 text-meta text-[var(--color-ink-3)]">
             แสดง {viewRows.length} งวด จากทั้งหมด {rows.length} งวด · สัญญาถึงปี{' '}
-            {finalYear + 543}
+            {finalYear + 543} · ปัดซ้าย–ขวาบนกราฟเพื่อเลื่อนปี
           </p>
         )}
 
-        <YearBarsChart rows={viewRows} axis={axis} />
-        <BalanceChart actual={viewRows} noPrepay={viewNoPrepay} hasPrepay={hasPrepay} />
-        <TaxChart summaries={viewTax} capBaht={CAP_BAHT} />
+        {/* ปัดบนกราฟเลื่อนหน้าต่างเดียวกับปุ่ม ← → ข้างบน
+            กราฟทั้งสามใช้หน้าต่างชุดเดียวกัน จึงต้องครอบรวมกัน ไม่ใช่แยกอันละตัว */}
+        <SwipeX onStep={shift} disabled={windowYears === null}>
+          <YearBarsChart rows={viewRows} axis={axis} />
+          <BalanceChart actual={viewRows} noPrepay={viewNoPrepay} hasPrepay={hasPrepay} />
+          <TaxChart summaries={viewTax} capBaht={CAP_BAHT} />
+        </SwipeX>
       </div>
 
       <button

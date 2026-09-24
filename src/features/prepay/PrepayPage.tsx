@@ -111,15 +111,29 @@ export function PrepayPage({
     const out = new Map<string, number>()
     for (const r of baseline.rows) {
       if (r.date > today) break
-      if (!r.flags.includes('actual_payment')) continue
       const scheduled = toFixed(
         findInstallment(terms.installmentSteps, r.index, terms.installmentSatang),
       )
-      const extra = r.paymentFixed - scheduled
+      // paymentFixed รวม prepay ของงวดนั้นไว้แล้ว จึงหักค่างวดทีเดียวได้ทั้งสองทาง
+      // งวดที่ไม่ได้บันทึกค่างวดไว้ ยังต้องจับ "โปะบางส่วน" ที่บันทึกลอย ๆ ให้เจอ
+      // ไม่งั้นเดือนที่โปะไป 350,000 จะโชว์ "—" ชวนให้วางแผนโปะทับซ้ำ
+      const extra = r.flags.includes('actual_payment') ? r.paymentFixed - scheduled : r.prepayFixed
       if (extra > 0n) out.set(`${yearOf(r.date)}-${monthOf(r.date)}`, Number(extra / FIXED_SCALE) / 100)
     }
     return out
   }, [baseline, terms, today])
+
+  /**
+   * เงินที่โปะไปแล้วจริงถึงวันนี้ — ทั้งที่บันทึกเป็น "โปะบางส่วน" และส่วนที่จ่ายเกินค่างวด
+   *
+   * ⚠️ ไม่ใช่ส่วนหนึ่งของ outcome — ตัวเลขในแผงสรุปเป็น "ส่วนต่างจากเส้นฐาน"
+   *    และเส้นฐานนับการจ่ายจริงไว้หมดแล้ว เงินที่โปะไปแล้วจึงหักล้างกันเป็น 0 เสมอ
+   *    ถ้าไม่แสดงแยกไว้ ผู้ใช้ที่โปะไป 4 ล้านจะเห็น "เงินที่โปะรวม 0" แล้วนึกว่าแอพไม่นับให้
+   */
+  const paidExtraTotal = useMemo(
+    () => [...paidExtra.values()].reduce((a, b) => a + b, 0),
+    [paidExtra],
+  )
 
   // ---------- การเลือกช่วง (ข้อ 3.4) ----------
   const tapMonth = (m: number) => {
@@ -236,7 +250,7 @@ export function PrepayPage({
       <section className="rounded-lg bg-[var(--color-panel)] p-5 text-[var(--color-panel-ink)]">
         <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
           <Stat
-            k="ปิดหนี้เร็วขึ้น"
+            k="ปิดหนี้เร็วขึ้นอีก"
             v={outcome.periodsSaved > 0 ? formatDuration(outcome.periodsSaved) : '—'}
             sub={`เหลือ ${formatDuration(withPlan.rows.length)}`}
           />
@@ -245,7 +259,13 @@ export function PrepayPage({
             v={bahtRounded(outcome.interestSavedFixed)}
             tone="principal"
           />
-          <Stat k="เงินที่โปะรวม" v={bahtRounded(outcome.totalPrepaidFixed)} />
+          <Stat
+            k="เงินที่จะโปะเพิ่ม"
+            v={bahtRounded(outcome.totalPrepaidFixed)}
+            {...(paidExtraTotal > 0
+              ? { sub: `โปะไปแล้วจริง ${Math.round(paidExtraTotal).toLocaleString('en-US')}` }
+              : {})}
+          />
           <Stat
             k="ได้คืนต่อเงินโปะ 1 บาท"
             v={outcome.roiBps === null ? '—' : `${(outcome.roiBps / 10_000).toFixed(2)} บาท`}
@@ -256,6 +276,14 @@ export function PrepayPage({
             }
           />
         </div>
+
+        {paidExtraTotal > 0 && (
+          <p className="mt-4 text-micro text-[var(--color-panel-ink-3)]">
+            ทุกตัวเลขข้างบนคือ &quot;เพิ่มจากที่ทำอยู่&quot; — เงินที่โปะไปแล้วจริงถูกนับไว้ในเส้นฐานแล้ว
+            ผลของมันคือ {formatDuration(withPlan.rows.length)} ที่เหลือ
+            ตัวเลขที่เห็นเป็น 0 จึงแปลว่ายังไม่ได้วางแผนโปะเพิ่มจากนี้ ไม่ใช่ว่าไม่ได้นับให้
+          </p>
+        )}
 
         {outcome.roiBps !== null && (
           <p className="mt-4 text-micro text-[var(--color-panel-ink-3)]">

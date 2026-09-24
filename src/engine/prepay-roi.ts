@@ -47,8 +47,25 @@ export function evaluatePrepayPlan(args: {
   const { loanId, baseline, withPlan, otherLoans, marginalTaxRateBps } = args
 
   const interestSaved = (baseline.totalInterestFixed - withPlan.totalInterestFixed) as Fixed
-  const totalPrepaid = withPlan.rows.reduce((a, r) => (a + r.prepayFixed) as Fixed, ZERO_FIXED)
   const periodsSaved = baseline.rows.length - withPlan.rows.length
+
+  /**
+   * เงินโปะที่ "แผนนี้เพิ่มเข้ามา" ไม่ใช่เงินโปะทั้งหมดในตาราง
+   *
+   * ⛔ ห้ามใช้ยอดรวมของ withPlan ตรง ๆ
+   *    interestSaved กับ periodsSaved เป็นผลต่างจากเส้นฐาน ถ้าตัวหารเป็นยอดสะสม
+   *    ทั้งสองฝั่งจะวัดคนละฐานกัน
+   *    เคสจริง: สัญญาที่บันทึก "โปะบางส่วน" ไว้แล้ว 350,000 พอเปิดหน้าวางแผน
+   *    แผนยังว่าง → ดอกที่ประหยัดได้ = 0 แต่ตัวหาร = 350,000
+   *    ROI จึงอ่านได้ว่า "ได้คืนต่อเงินโปะ 1 บาท = 0.00 บาท" ทั้งที่ยังไม่ได้วางแผนอะไรเลย
+   *
+   * ⚠️ ติดลบได้ ถ้าแผนทำให้ปิดหนี้ก่อนถึงงวดที่มีโปะบันทึกไว้ล่วงหน้า
+   *    งวดนั้นจะไม่เกิดขึ้นใน withPlan — ปัดขึ้นเป็น 0 แล้วให้ ROI เป็น null ดีกว่าโชว์ค่าติดลบ
+   */
+  const prepaidIn = (s: ScheduleResult): Fixed =>
+    s.rows.reduce((a, r) => (a + r.prepayFixed) as Fixed, ZERO_FIXED)
+  const delta = (prepaidIn(withPlan) - prepaidIn(baseline)) as Fixed
+  const totalPrepaid = delta > 0n ? delta : ZERO_FIXED
 
   const roiBps =
     totalPrepaid > 0n ? Number((interestSaved * 10_000n) / totalPrepaid) : null
