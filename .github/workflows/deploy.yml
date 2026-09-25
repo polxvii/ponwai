@@ -40,7 +40,28 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # Worker — ถือ cron ping Supabase ไว้ และเป็น URL สำรอง
+      # ⛔ ต้องขึ้นก่อน build:pages เสมอ เพราะ wrangler อ่าน dist/_redirects
+      #    แล้วส่งขึ้น API เป็น metadata ของ Worker ทำให้ deploy ตาย (ab94543)
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Pages — URL หลักที่อ่านง่ายกว่า ไม่มีชื่อ account อยู่ในนั้น
+      # ⚠️ Pages ไม่รองรับ cron trigger จึงต้องคง Worker ไว้ ไม่ใช่ย้ายแล้วลบทิ้ง
+      - name: create Pages project (ข้ามถ้ามีแล้ว)
+        continue-on-error: true
+        run: npx wrangler pages project create ponwai --production-branch=main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # copy _redirects เข้า dist/ — Pages ไม่มี not_found_handling ต้องประกาศเป็นไฟล์
+      - run: node scripts/pages-assets.mjs
+
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=ponwai --branch=main
