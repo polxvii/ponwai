@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { baht, formatDuration, formatThaiDate } from '@/lib/format'
+import { BankMark } from '@/components/BankMark'
 import { deleteLoan, getAllLoansFull, type LoanFull, type LoanListItem } from '@/lib/db'
 import { DashboardPage, type LoanBundle } from '../dashboard/DashboardPage'
 import { PrepayPage } from '../prepay/PrepayPage'
@@ -316,11 +317,16 @@ function LoanCard({
   return (
     <li className="rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4">
       <button onClick={onOpen} className="tap block w-full text-left">
-        <h2 className="text-lead">{item.propertyName}</h2>
-        <p className="text-meta text-[var(--color-ink-2)]">
-          {item.bankLabel} · {ORIGIN_LABELS[item.origin]}
-          {item.status === 'closed' && ' · ปิดแล้ว'}
-        </p>
+        <div className="flex items-start gap-3">
+          <BankMark code={item.bankCode} name={item.bankLabel} />
+          <div className="min-w-0">
+            <h2 className="text-lead">{item.propertyName}</h2>
+            <p className="text-meta text-[var(--color-ink-2)]">
+              {item.bankLabel} · {ORIGIN_LABELS[item.origin]}
+              {item.status === 'closed' && ' · ปิดแล้ว'}
+            </p>
+          </div>
+        </div>
 
         <dl className="mt-3 space-y-1 text-meta">
           <Row k="วงเงิน" v={baht(item.disbursedSatang, 0)} />

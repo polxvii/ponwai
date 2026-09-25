@@ -10,6 +10,7 @@ import type { RankedOffer } from '@engine/compare.js'
 import type { Fixed } from '@engine/money.js'
 import { bahtFixed, bahtRounded, baht, pct, formatPeriods } from '@/lib/format'
 import { SplitBar } from '@/components/SplitBar'
+import { BankMark } from '@/components/BankMark'
 
 export function ResultsTable({
   ranked,
@@ -63,7 +64,10 @@ export function ResultsTable({
               >
                 <td className="py-3 pr-4 num">{r.feasible ? r.rank : '—'}</td>
                 <td className="py-3 pr-4">
-                  <span className="font-medium">{nameOf(r.bankCode)}</span>
+                  <span className="inline-flex items-center gap-2">
+                    <BankMark code={r.bankCode} name={nameOf(r.bankCode)} size={22} />
+                    <span className="font-medium">{nameOf(r.bankCode)}</span>
+                  </span>
                   {r.rank === 1 && r.feasible && (
                     <span className="ml-2 rounded-sm bg-[var(--color-principal-tint)] px-1.5 py-0.5 text-micro text-[var(--color-principal-text)]">
                       ถูกที่สุด
@@ -141,8 +145,9 @@ function OfferCardMobile({
       } ${!r.feasible ? 'opacity-70' : ''}`}
     >
       <header className="flex items-baseline justify-between">
-        <h3 className="text-lead">
-          {r.feasible && <span className="num mr-2 text-[var(--color-ink-3)]">{r.rank}</span>}
+        <h3 className="flex items-center gap-2 text-lead">
+          {r.feasible && <span className="num text-[var(--color-ink-3)]">{r.rank}</span>}
+          <BankMark code={r.bankCode} name={nameOf(r.bankCode)} size={24} />
           {nameOf(r.bankCode)}
         </h3>
         {r.rank === 1 && r.feasible && (

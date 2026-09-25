@@ -29,6 +29,7 @@ import type { PrepayPlan } from '@engine/prepay.js'
 import { isoDate } from '@engine/date.js'
 import { todayISO } from './model'
 import { balanceOn, prepayOfRow, settledPeriods } from '@/lib/progress'
+import { BankMark } from '@/components/BankMark'
 
 const FIXED = 1_000_000_000_000n
 
@@ -150,12 +151,15 @@ export function LoanDetail({
 
   return (
     <Wrapper onBack={onBack}>
-      <header className="mb-6">
-        <h1 className="text-hero">{item.propertyName}</h1>
-        <p className="mt-1 text-meta text-[var(--color-ink-2)]">
-          {item.bankLabel} · ทำสัญญา {formatThaiDate(item.contractDate, 'long')} ·{' '}
-          {formatDuration(item.termMonths)}
-        </p>
+      <header className="mb-6 flex items-start gap-3">
+        <BankMark code={item.bankCode} name={item.bankLabel} size={36} />
+        <div className="min-w-0">
+          <h1 className="text-hero">{item.propertyName}</h1>
+          <p className="mt-1 text-meta text-[var(--color-ink-2)]">
+            {item.bankLabel} · ทำสัญญา {formatThaiDate(item.contractDate, 'long')} ·{' '}
+            {formatDuration(item.termMonths)}
+          </p>
+        </div>
       </header>
 
       {full.conventionAssumed && (

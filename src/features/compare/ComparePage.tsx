@@ -6,6 +6,7 @@ import { Field, NumberField, SelectField, TextField, Toggle } from '@/components
 import { formatDuration } from '@/lib/format'
 import { useLocalState } from '@/lib/persist'
 import { ResetButton } from '@/components/ResetButton'
+import { BankMark } from '@/components/BankMark'
 import { ResultsTable } from './ResultsTable'
 import { CostCurveChart, SensitivityBand } from './CostCurveChart'
 import {
@@ -273,7 +274,9 @@ function OfferForm({
   return (
     <section className="rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-micro text-[var(--color-ink-3)]">
+        <span className="flex items-center gap-2 text-micro text-[var(--color-ink-3)]">
+          {/* เห็นสีแบงก์ตั้งแต่ตอนกรอก จะได้ไม่กรอกผิดใบตอนมีหลายข้อเสนอเปิดพร้อมกัน */}
+          <BankMark code={draft.bankCode} name={offerLabel(draft)} size={20} />
           ข้อเสนอที่ {index + 1}
         </span>
         {onRemove && (

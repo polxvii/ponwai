@@ -58,6 +58,8 @@ export type LoanListItem = {
   propertyId: string
   propertyName: string
   bankLabel: string
+  /** ใช้เลือกสีเครื่องหมายประจำธนาคาร — query มาอยู่แล้ว แค่ไม่เคยส่งออกมา */
+  bankCode: string | null
   contractDate: ISODate
   firstDueDate: ISODate
   termMonths: number
@@ -105,6 +107,7 @@ export async function listLoans(): Promise<LoanListItem[]> {
     propertyId: r.property_id!,
     propertyName: r.properties?.name ?? 'ไม่มีชื่อ',
     bankLabel: r.loan_offers?.bank_name ?? r.loan_offers?.bank_code ?? '—',
+    bankCode: r.loan_offers?.bank_code ?? null,
     contractDate: isoDate(r.contract_date!),
     firstDueDate: isoDate(r.first_due_date!),
     termMonths: r.term_months!,
