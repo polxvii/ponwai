@@ -1,0 +1,9 @@
+# SPA routing สำหรับ Cloudflare Pages
+#
+# Worker ใช้ assets.not_found_handling = "single-page-application" ใน wrangler.jsonc
+# แต่ Pages ไม่มีตัวเลือกนั้น ต้องประกาศเป็นไฟล์แทน ไม่งั้นรีเฟรชหน้าลึก ๆ จะได้ 404
+#
+# ⚠️ ไฟล์ที่มีอยู่จริงถูกเสิร์ฟก่อนกฎนี้เสมอ
+#    /sw.js และไอคอนต่าง ๆ จึงไม่ถูก rewrite ไปเป็น index.html
+#    ถ้าโดน service worker จะพังทั้งตัวเพราะได้ HTML แทน JavaScript
+/*    /index.html   200
