@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "deploy": "npm run build && wrangler deploy",
+    "build:pages": "npm run build && node scripts/pages-assets.mjs",
     "test:live": "vitest run src/lib/db.live.test.ts"
   },
   "devDependencies": {

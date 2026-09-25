@@ -1,0 +1,15 @@
+# SPA routing สำหรับ Cloudflare Pages เท่านั้น
+#
+# ⛔ ห้ามย้ายไฟล์นี้กลับไปไว้ใน public/
+#    vite จะ copy ทุกอย่างใน public/ ลง dist/ แล้ว wrangler จะอ่าน dist/_redirects
+#    ส่งขึ้น Cloudflare API เป็นส่วนหนึ่งของ metadata ของ Worker (assets._redirects)
+#    ซึ่งทำให้ `wrangler deploy` ตายทั้ง job — เคยทำ CI แดงมาแล้ว 3 commit (ab94543)
+#    Worker ไม่ต้องใช้ไฟล์นี้อยู่แล้ว เพราะมี assets.not_found_handling ใน wrangler.jsonc
+#
+# ใช้ `npm run build:pages` เพื่อ build แล้ว copy ไฟล์นี้ลง dist/ ตอน deploy ขึ้น Pages
+# Pages ไม่มี not_found_handling ต้องประกาศเป็นไฟล์ ไม่งั้นรีเฟรชหน้าลึก ๆ จะได้ 404
+#
+# ⚠️ ไฟล์ที่มีอยู่จริงถูกเสิร์ฟก่อนกฎนี้เสมอ
+#    /sw.js และไอคอนต่าง ๆ จึงไม่ถูก rewrite ไปเป็น index.html
+#    ถ้าโดน service worker จะพังทั้งตัวเพราะได้ HTML แทน JavaScript
+/*    /index.html   200
