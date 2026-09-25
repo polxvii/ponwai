@@ -872,9 +872,13 @@ function ScheduleTable({
                       </span>
                     )}
                   </TdRight>
-                  {/* ปลายช่วงเป็นแบบเปิด วันตัดยังไม่ถูกคิดดอก จึงแสดงถึงวันก่อนหน้า */}
+                  {/* ช่วงคิดดอกคือ (วันตัดงวดก่อน, วันตัดงวดนี้] — วันตัดถูกคิดดอกด้วย
+                      accrueInterestVariableRate ไล่วันจาก d0+1 ถึง d1 โดยรวมปลาย
+                      และยอดจ่าย/ยอดโปะที่ลงตรงวันตัดพอดีก็นับเป็นของงวดนี้
+                      ⛔ ห้ามแสดงเป็น accrualFrom – (วันตัด−1) จำนวนวันจะเท่ากันก็จริง
+                         แต่ป้ายเลื่อนไปหนึ่งวันทั้งสองหัว อ่านแล้วขัดกับใบแจ้งยอด */}
                   <td className="py-2 pr-4 whitespace-nowrap text-[var(--color-ink-3)]">
-                    {formatThaiDate(r.accrualFrom)} – {formatThaiDate(addDays(r.date, -1))}
+                    {formatThaiDate(addDays(r.accrualFrom, 1))} – {formatThaiDate(r.date)}
                   </td>
                   <TdRight>{r.accrualDays}</TdRight>
                 </tr>
