@@ -10,12 +10,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { buildSchedule } from '@engine/schedule.js'
 import { groupSchedule, type GroupAxis } from '@engine/grouping.js'
 import { findInstallment } from '@engine/rates.js'
-import { addDays, daysBetween, type ISODate } from '@engine/date.js'
+import { daysBetween, type ISODate } from '@engine/date.js'
 import { toFixed, type Fixed, type Satang } from '@engine/money.js'
 import type { PaymentEvent, PaymentKind, ScheduleRow } from '@engine/types.js'
 import { Field, NumberField, SelectField, TextField, DateField } from '@/components/Field'
 import { SplitBar } from '@/components/SplitBar'
-import { baht, bahtFixed, bahtRounded, formatDuration, formatMonthSpan, formatThaiDate, pct } from '@/lib/format'
+import {
+  baht, bahtFixed, bahtRounded, formatAccrualRange, formatDuration, formatMonthSpan,
+  formatThaiDate, pct,
+} from '@/lib/format'
 import { downloadCsv, paymentsCsv, reportName, scheduleCsv, yearSummaryCsv } from '@/lib/export'
 import {
   addPayment, getLoanFull, getPlan, removePayment, setScheduleOverride, toLoanTerms,
@@ -712,6 +715,15 @@ function ScheduleTable({
   /* คอลัมน์โปะโผล่เฉพาะตอนมีของให้โชว์ — สัญญาที่ไม่เคยโปะไม่ต้องแบกคอลัมน์ว่าง
      บนจอ 380px ทุกคอลัมน์ที่เพิ่มคือการดันคอลัมน์อื่นออกนอกจอ */
   const prepayAt = (r: ScheduleRow) => prepayOfRow(r, scheduledOf(r.index))
+  /**
+   * รายการโอนที่ตกอยู่ในงวดนี้ — ช่วง (accrualFrom, date] ช่วงเดียวกับที่ engine ใช้
+   *
+   * ⚠️ ต้องโชว์เมื่อไม่ได้โอนก้อนเดียวตรงวันตัด ไม่งั้นแถวบอกแค่ยอดรวม
+   *    เงินที่ตั้งใจโปะของเดือนก่อนแต่โอนหลังวันตัดไปแล้ว จะไปโผล่ในแถวเดือนถัดไป
+   *    โดยไม่มีอะไรบนจออธิบาย ผู้ใช้จะนึกว่าแอพจับยอดผิดงวด
+   */
+  const paymentsIn = (r: ScheduleRow) =>
+    events.filter((e) => e.date > r.accrualFrom && e.date <= r.date)
   const showPrepay = rows.some((r) => prepayAt(r) > 0n)
   const [showAll, setShowAll] = useState(false)
   // ใช้เกณฑ์เดียวกับการ์ดด้านบน ไม่งั้นแถวที่ไฮไลต์กับยอดคงเหลือชี้คนละงวด
@@ -794,6 +806,14 @@ function ScheduleTable({
               const isActual = r.flags.includes('actual_payment')
               // งวดที่ผ่านไปแล้วและไม่มีบันทึก ไม่ใช่ "คาด" — เป็นข้อเท็จจริงว่าไม่ได้จ่าย
               const noRecord = r.flags.includes('no_payment_recorded')
+              // โอนก้อนเดียวตรงวันตัดคือกรณีปกติ ไม่ต้องอธิบายอะไรเพิ่ม
+              const paid = paymentsIn(r)
+              const paidDetail =
+                paid.length === 0 || (paid.length === 1 && paid[0]!.date === r.date)
+                  ? null
+                  : paid
+                      .map((e) => `${formatThaiDate(e.date, 'dayMonth')} ${baht(e.amountSatang, 0)}`)
+                      .join(' · ')
               // 'prepay' ไม่ต้องติดป้าย — คอลัมน์โปะบอกยอดอยู่แล้ว ป้ายซ้ำเปลืองที่บนจอแคบ
               const otherFlags = r.flags.filter(
                 (f) => f !== 'actual_payment' && f !== 'no_payment_recorded' && f !== 'prepay',
@@ -873,6 +893,14 @@ function ScheduleTable({
                     >
                       {isActual ? 'จริง' : noRecord ? 'ไม่มีบันทึก' : 'คาด'}
                     </span>
+                    {paidDetail !== null && (
+                      <div
+                        className="text-micro font-normal text-[var(--color-ink-3)]"
+                        title="รายการโอนที่ตกอยู่ในงวดนี้ — เงินที่โอนหลังวันตัดจะนับเป็นของงวดถัดไป"
+                      >
+                        {paidDetail}
+                      </div>
+                    )}
                   </TdRight>
                   <TdRight>
                     {bahtFixed(r.balanceAfterFixed)}
@@ -882,13 +910,9 @@ function ScheduleTable({
                       </span>
                     )}
                   </TdRight>
-                  {/* ช่วงคิดดอกคือ (วันตัดงวดก่อน, วันตัดงวดนี้] — วันตัดถูกคิดดอกด้วย
-                      accrueInterestVariableRate ไล่วันจาก d0+1 ถึง d1 โดยรวมปลาย
-                      และยอดจ่าย/ยอดโปะที่ลงตรงวันตัดพอดีก็นับเป็นของงวดนี้
-                      ⛔ ห้ามแสดงเป็น accrualFrom – (วันตัด−1) จำนวนวันจะเท่ากันก็จริง
-                         แต่ป้ายเลื่อนไปหนึ่งวันทั้งสองหัว อ่านแล้วขัดกับใบแจ้งยอด */}
+                  {/* ช่วงคิดดอกคือ (วันตัดงวดก่อน, วันตัดงวดนี้] — วันตัดถูกคิดดอกด้วย (TV-50) */}
                   <td className="py-2 pr-4 whitespace-nowrap text-[var(--color-ink-3)]">
-                    {formatThaiDate(addDays(r.accrualFrom, 1))} – {formatThaiDate(r.date)}
+                    {formatAccrualRange(r.accrualFrom, r.date)}
                   </td>
                   <TdRight>{r.accrualDays}</TdRight>
                 </tr>

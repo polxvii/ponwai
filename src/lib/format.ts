@@ -27,7 +27,7 @@ export function thaiYear(iso: ISODate): number {
   return Number(iso.slice(0, 4)) + 543
 }
 
-export type DateStyle = 'short' | 'long' | 'monthYear' | 'yearOnly'
+export type DateStyle = 'short' | 'long' | 'monthYear' | 'yearOnly' | 'dayMonth'
 
 /**
  * แปลงวันที่ ISO เป็นข้อความไทย พ.ศ.
@@ -44,14 +44,23 @@ export function formatThaiDate(iso: ISODate, style: DateStyle = 'short'): string
     case 'monthYear': return `${TH_MONTHS_SHORT[m - 1]} ${y}`
     case 'long':      return `${d} ${TH_MONTHS_LONG[m - 1]} ${y}`
     case 'short':     return `${d} ${TH_MONTHS_SHORT[m - 1]} ${y}`
+    // ไม่มีปี ใช้ในตารางที่คอลัมน์อื่นบอกปีอยู่แล้ว เช่นรายการโอนย่อยในงวด
+    case 'dayMonth':  return `${d} ${TH_MONTHS_SHORT[m - 1]}`
   }
 }
 
-/** ช่วงวันที่คิดดอกเบี้ย — แสดงตามรูปแบบที่ใบแจ้งยอดธนาคารใช้ (ข้อ 1.4.3) */
+/**
+ * ช่วงวันที่คิดดอกเบี้ย — แสดงตามรูปแบบที่ใบแจ้งยอดธนาคารใช้ (ข้อ 1.4.3)
+ *
+ * ⛔ default ต้องเป็น end_inclusive เพราะ engine คิดดอกในช่วง (accrualFrom, date]
+ *    accrueInterestVariableRate ไล่วันจาก d0+1 ถึง d1 โดยรวมปลาย (TV-50)
+ *    start_inclusive ให้จำนวนวันเท่ากันก็จริง แต่ป้ายเลื่อนไปหนึ่งวันทั้งสองหัว
+ *    เหลือไว้เป็นตัวเลือกเพราะใบแจ้งบางธนาคารพิมพ์แบบนั้น
+ */
 export function formatAccrualRange(
   from: ISODate,
   to: ISODate,
-  display: 'start_inclusive' | 'end_inclusive' = 'start_inclusive',
+  display: 'start_inclusive' | 'end_inclusive' = 'end_inclusive',
 ): string {
   if (display === 'start_inclusive') {
     return `${formatThaiDate(from)} – ${formatThaiDate(addDays(to, -1))}`
