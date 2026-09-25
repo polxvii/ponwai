@@ -772,6 +772,49 @@ export async function loadScenario(scenarioId: string): Promise<PrepayPlan> {
   }
 }
 
+/**
+ * แผนโปะของสัญญา — มีได้แค่แผนเดียว
+ *
+ * ⚠️ ตารางยังเก็บได้หลาย scenario ตามสคีมาเดิม แต่ชั้น UI ใช้แค่แผนล่าสุด
+ *    เพราะการให้ตั้งชื่อ/เลือกแผน ทำให้ทุกครั้งที่เปิดหน้ามาต้องมานั่งเลือกก่อน
+ *    ทั้งที่คนส่วนใหญ่มีแผนเดียวและอยากแก้แผนนั้นต่อ
+ */
+const PLAN_NAME = 'แผนโปะ'
+
+export async function getPlan(loanId: string): Promise<PrepayPlan | null> {
+  const rows = must(
+    await supabase
+      .from('scenarios')
+      .select('id')
+      .eq('loan_id', loanId)
+      .order('created_at', { ascending: false })
+      .limit(1),
+  ) as { id: string }[]
+  const hit = rows[0]
+  return hit ? await loadScenario(hit.id) : null
+}
+
+/**
+ * เขียนทับแผนเดิมของสัญญานี้
+ *
+ * ⛔ ต้องสร้างอันใหม่ก่อนแล้วค่อยลบของเก่า ห้ามสลับลำดับ
+ *    PostgREST ไม่มี transaction ข้าม request ถ้าลบก่อนแล้วเขียนพลาด
+ *    แผนที่ผู้ใช้นั่งวางมาทั้งปีจะหายโดยไม่มีอะไรกู้คืนได้
+ * ⚠️ ลบไม่สำเร็จไม่ใช่เรื่องคอขาดบาดตาย — getPlan หยิบอันล่าสุดอยู่แล้ว
+ *    เหลือแถวเก่าค้างดีกว่าทำให้การบันทึกล้มเหลวทั้งที่ข้อมูลใหม่เขียนลงไปแล้ว
+ */
+export async function savePlan(loanId: string, plan: PrepayPlan): Promise<void> {
+  const old = await listScenarios(loanId)
+  await saveScenario(loanId, PLAN_NAME, plan)
+  for (const s of old) {
+    try {
+      await deleteScenario(s.id)
+    } catch {
+      /* แผนใหม่บันทึกไปแล้ว ของเก่าค้างไว้ไม่กระทบการอ่าน */
+    }
+  }
+}
+
 export async function deleteScenario(scenarioId: string): Promise<void> {
   const res = await supabase.from('scenarios').delete().eq('id', scenarioId)
   if (res.error) throw new Error(translateDbError(res.error))

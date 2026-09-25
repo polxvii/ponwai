@@ -8,7 +8,7 @@
  * ⛔ สองมุมมองต้องแสดงคนละอย่าง ถ้าแค่จัดเรียงข้อมูลชุดเดิมใหม่ ไม่ต้องมีสองมุมมอง
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { buildSchedule } from '@engine/schedule.js'
 import { findInstallment } from '@engine/rates.js'
 import { evaluatePrepayPlan } from '@engine/prepay-roi.js'
@@ -21,9 +21,9 @@ import { baht, bahtRounded, formatDuration, formatThaiDate, pct } from '@/lib/fo
 import { isoDate } from '@engine/date.js'
 import { interestUpTo, settledPeriods } from '@/lib/progress'
 import {
-  deleteScenario, getMarginalTaxRateBps, listScenarios, loadScenario, saveScenario,
+  getMarginalTaxRateBps, getPlan, savePlan,
   setMarginalTaxRateBps, toLoanTerms, toPaymentEvents,
-  type LoanFull, type LoanListItem, type ScenarioSummary,
+  type LoanFull, type LoanListItem,
 } from '@/lib/db'
 import {
   MONTH_NAMES, PRESET_CHIPS,
@@ -61,18 +61,30 @@ export function PrepayPage({
 
   const [taxRateBps, setTaxRateBps] = useState<number | null>(null)
   const [taxLoaded, setTaxLoaded] = useState(false)
-  const [scenarios, setScenarios] = useState<ScenarioSummary[]>([])
-  const [scenarioName, setScenarioName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** null = ยังโหลดไม่เสร็จ ห้ามให้ผู้ใช้แก้ก่อน ไม่งั้นแผนที่โหลดมาทับสิ่งที่เพิ่งพิมพ์ */
+  const [planLoaded, setPlanLoaded] = useState(false)
+  const [savedAt, setSavedAt] = useState<string | null>(null)
 
-  const reloadScenarios = useCallback(() => {
-    listScenarios(item.loanId)
-      .then(setScenarios)
-      .catch((e: Error) => setError(e.message))
+  // แผนของสัญญานี้มีอันเดียว เปิดหน้ามาก็เอาอันนั้นมาแก้ต่อเลย ไม่ต้องเลือก
+  useEffect(() => {
+    let alive = true
+    getPlan(item.loanId)
+      .then((p) => {
+        if (!alive) return
+        if (p) setDraft(fromPlan(p))
+        setPlanLoaded(true)
+      })
+      .catch((e: Error) => {
+        if (!alive) return
+        setError(e.message)
+        setPlanLoaded(true)
+      })
+    return () => {
+      alive = false
+    }
   }, [item.loanId])
-
-  useEffect(reloadScenarios, [reloadScenarios])
   useEffect(() => {
     getMarginalTaxRateBps()
       .then((v) => {
@@ -131,6 +143,22 @@ export function PrepayPage({
    *    และเส้นฐานนับการจ่ายจริงไว้หมดแล้ว เงินที่โปะไปแล้วจึงหักล้างกันเป็น 0 เสมอ
    *    ถ้าไม่แสดงแยกไว้ ผู้ใช้ที่โปะไป 4 ล้านจะเห็น "เงินที่โปะรวม 0" แล้วนึกว่าแอพไม่นับให้
    */
+  /**
+   * ค่างวดตามสัญญาของแต่ละเดือน "ปี-เดือน" -> บาท
+   *
+   * ⚠️ ต้องเป็นค่างวดของงวดนั้นจริง ๆ ไม่ใช่ค่างวดตั้งต้นของสัญญา
+   *    สัญญาที่แบ่งช่วงค่างวด ปีโปรกับปีลอยตัวไม่เท่ากัน
+   *    คนวางแผนโปะต้องรู้ว่าเดือนนั้นจ่ายเท่าไหร่อยู่แล้ว ถึงจะตัดสินใจได้ว่าโปะเพิ่มไหวแค่ไหน
+   */
+  const dueByMonth = useMemo(() => {
+    const out = new Map<string, number>()
+    for (const r of baseline.rows) {
+      const pay = findInstallment(terms.installmentSteps, r.index, terms.installmentSatang)
+      out.set(`${yearOf(r.date)}-${monthOf(r.date)}`, Number(pay) / 100)
+    }
+    return out
+  }, [baseline, terms])
+
   const paidExtraTotal = useMemo(
     () => [...paidExtra.values()].reduce((a, b) => a + b, 0),
     [paidExtra],
@@ -253,40 +281,11 @@ export function PrepayPage({
   }, [selected.length])
 
   async function save() {
-    const name = scenarioName.trim()
-    if (name === '') return setError('ตั้งชื่อแผนก่อนบันทึก')
     setBusy(true)
     setError(null)
     try {
-      await saveScenario(item.loanId, name, toPlan(draft))
-      setScenarioName('')
-      reloadScenarios()
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function load(id: string) {
-    setBusy(true)
-    setError(null)
-    try {
-      setDraft(fromPlan(await loadScenario(id)))
-      setSelected([])
-      setAnchor(null)
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function drop(id: string) {
-    setBusy(true)
-    try {
-      await deleteScenario(id)
-      reloadScenarios()
+      await savePlan(item.loanId, toPlan(draft))
+      setSavedAt(new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }))
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -511,6 +510,7 @@ export function PrepayPage({
         <CalendarView
           draft={draft}
           paidExtra={paidExtra}
+          dueByMonth={dueByMonth}
           year={editingYear}
           selected={selected}
           anchor={anchor}
@@ -649,62 +649,30 @@ export function PrepayPage({
 
       <LumpSection draft={draft} onChange={setDraft} today={today} />
 
-      {/* ---------- บันทึก/เทียบแผน ---------- */}
+      {/* ---------- บันทึกแผน ---------- */}
       <section className="mt-8">
-        <h2 className="text-row">แผนที่บันทึกไว้</h2>
+        <h2 className="text-row">แผนโปะของสัญญานี้</h2>
         <p className="mt-1 text-meta text-[var(--color-ink-2)]">
-          บันทึกได้หลายชุดแล้วสลับดู เช่น โปะสม่ำเสมอ กับ โปะก้อนตอนโบนัส
+          มีแผนเดียวต่อสัญญา บันทึกแล้วตารางผ่อนกับสรุปรายปีในหน้าสัญญาจะคิดตามแผนนี้ให้
         </p>
 
-        <div className="mt-3 flex flex-wrap items-end gap-3">
-          <div className="min-w-[220px] flex-1">
-            <Field label="ชื่อแผน">
-              <TextField
-                value={scenarioName}
-                onChange={setScenarioName}
-                placeholder="เช่น โปะเดือนละ 5,000"
-              />
-            </Field>
-          </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
           <button
             onClick={() => void save()}
-            disabled={busy}
+            disabled={busy || !planLoaded}
             className="tap rounded-md bg-[var(--color-interest)] px-4 py-2 text-[var(--color-panel-ink)] disabled:opacity-50"
           >
-            บันทึกแผนนี้
+            {busy ? 'กำลังบันทึก…' : 'บันทึกแผน'}
           </button>
+          {savedAt !== null && !busy && (
+            <span className="text-meta text-[var(--color-ok)]">บันทึกแล้ว {savedAt} น.</span>
+          )}
         </div>
 
         {error && (
           <p className="mt-3 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
             {error}
           </p>
-        )}
-
-        {scenarios.length > 0 && (
-          <ul className="mt-4 divide-y divide-[var(--color-rule)]">
-            {scenarios.map((s) => (
-              <li key={s.id} className="flex items-center justify-between gap-4 py-2">
-                <span>{s.name}</span>
-                <span className="flex gap-3 text-meta">
-                  <button
-                    onClick={() => void load(s.id)}
-                    disabled={busy}
-                    className="tap text-[var(--color-interest)] hover:underline disabled:opacity-50"
-                  >
-                    เปิด
-                  </button>
-                  <button
-                    onClick={() => void drop(s.id)}
-                    disabled={busy}
-                    className="tap text-[var(--color-ink-3)] hover:text-[var(--color-warn)] disabled:opacity-50"
-                  >
-                    ลบ
-                  </button>
-                </span>
-              </li>
-            ))}
-          </ul>
         )}
       </section>
     </div>
@@ -778,6 +746,7 @@ function YearNav({
 function CalendarView({
   draft,
   paidExtra,
+  dueByMonth,
   year,
   selected,
   anchor,
@@ -787,6 +756,8 @@ function CalendarView({
   draft: PrepayDraft
   /** "ปี-เดือน" -> ยอดที่จ่ายเกินค่างวดไปแล้วจริง ล็อกไว้แก้ที่นี่ไม่ได้ */
   paidExtra: ReadonlyMap<string, number>
+  /** "ปี-เดือน" -> ค่างวดตามสัญญาของงวดนั้น */
+  dueByMonth: ReadonlyMap<string, number>
   year: number
   selected: readonly number[]
   anchor: number | null
@@ -795,6 +766,7 @@ function CalendarView({
 }) {
   const [editing, setEditing] = useState<number | null>(null)
   const doneAt = (m: number) => paidExtra.get(`${year}-${m}`)
+  const dueAt = (m: number) => dueByMonth.get(`${year}-${m}`)
   // เดือนที่โปะไปแล้วจริงให้โชว์ยอดจริง ไม่ใช่ยอดที่ตั้งไว้ในแผน
   const values = Array.from({ length: 12 }, (_, i) => doneAt(i + 1) ?? amountAt(draft, year, i + 1))
   const max = Math.max(1, ...values)
@@ -822,6 +794,12 @@ function CalendarView({
               {MONTH_NAMES[i]}
               {done !== undefined && (
                 <span className="ml-1 text-[var(--color-principal-dark)]">จ่ายแล้ว</span>
+              )}
+              {/* ค่างวดที่ต้องจ่ายอยู่แล้วของเดือนนั้น — ฐานที่ยอดโปะจะไปบวกเพิ่ม */}
+              {dueAt(m) !== undefined && (
+                <span className="block text-micro text-[var(--color-ink-3)]">
+                  ค่างวด {Math.round(dueAt(m)!).toLocaleString('en-US')}
+                </span>
               )}
             </button>
 

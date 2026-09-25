@@ -15,12 +15,12 @@ import type { Fixed, Satang } from '@engine/money.js'
 import type { PaymentEvent, PaymentKind, ScheduleRow } from '@engine/types.js'
 import { Field, NumberField, SelectField, TextField, DateField } from '@/components/Field'
 import { SplitBar } from '@/components/SplitBar'
-import { baht, bahtRounded, formatDuration, formatMonthSpan, formatThaiDate, pct } from '@/lib/format'
+import { baht, bahtFixed, bahtRounded, formatDuration, formatMonthSpan, formatThaiDate, pct } from '@/lib/format'
 import { downloadCsv, paymentsCsv, reportName, scheduleCsv, yearSummaryCsv } from '@/lib/export'
 import {
-  addPayment, getLoanFull, listScenarios, loadScenario, removePayment, toLoanTerms,
+  addPayment, getLoanFull, getPlan, removePayment, toLoanTerms,
   toPaymentEvents, updatePayment,
-  type LoanFull, type LoanListItem, type ScenarioSummary, type StoredPayment,
+  type LoanFull, type LoanListItem, type StoredPayment,
 } from '@/lib/db'
 import type { PrepayPlan } from '@engine/prepay.js'
 import { isoDate } from '@engine/date.js'
@@ -45,9 +45,7 @@ export function LoanDetail({
 }) {
   const [full, setFull] = useState<LoanFull | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [scenarios, setScenarios] = useState<ScenarioSummary[]>([])
-  /** แผนโปะที่เลือกดูอยู่ — null = ดูตามที่จ่ายจริงอย่างเดียว */
-  const [planId, setPlanId] = useState<string>('')
+  /** แผนโปะของสัญญานี้ — null = ยังไม่เคยวางแผน */
   const [prepayPlan, setPrepayPlan] = useState<PrepayPlan | null>(null)
   const [axis, setAxis] = useState<GroupAxis>('contract_year')
   const [reloadKey, setReloadKey] = useState(0)
@@ -63,24 +61,22 @@ export function LoanDetail({
     }
   }, [item.loanId, reloadKey])
 
+  /**
+   * โหลดแผนโปะมาใช้เลย ไม่ต้องให้เลือก
+   *
+   * ⚠️ ต้องโหลดใหม่ทุกครั้งที่ reloadKey ขยับ ไม่งั้นกลับจากหน้าวางแผนโปะ
+   *    ตารางยังคิดจากแผนเก่าอยู่ ทั้งที่เพิ่งกดบันทึกไป
+   * ⛔ แผนโหลดไม่ได้ต้องไม่ทำให้ทั้งหน้าพัง ตารางที่คิดจากการจ่ายจริงยังถูกต้องอยู่
+   */
   useEffect(() => {
-    listScenarios(item.loanId)
-      .then(setScenarios)
-      .catch(() => setScenarios([]))
-  }, [item.loanId])
-
-  useEffect(() => {
-    if (planId === '') return setPrepayPlan(null)
     let alive = true
-    loadScenario(planId)
-      .then((p) => {
-        if (alive) setPrepayPlan(p)
-      })
-      .catch((e: Error) => setError(e.message))
+    getPlan(item.loanId)
+      .then((p) => alive && setPrepayPlan(p))
+      .catch(() => alive && setPrepayPlan(null))
     return () => {
       alive = false
     }
-  }, [planId])
+  }, [item.loanId, reloadKey])
 
   const today = todayISO()
 
@@ -139,6 +135,10 @@ export function LoanDetail({
   const principalPaid = ((item.disbursedSatang * FIXED) - balanceNow) as Fixed
   const payoff = rows[rows.length - 1]
   const savedPeriods = plan.rows.length - rows.length
+  // แถวปีที่ครบอายุสัญญาของตารางตามสัญญา — มีก็ต่อเมื่อตารางนั้นยังไม่จบ
+  const contractAtTerm = plan.paidOff
+    ? undefined
+    : plan.rows.find((r) => r.index === item.termMonths)
   const installmentNext = findInstallment(
     terms.installmentSteps,
     Math.min(paidPeriods + 1, Math.max(1, plan.rows.length)),
@@ -159,6 +159,26 @@ export function LoanDetail({
         <p className="mb-4 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
           ⚠️ วิธีนับวันและการปัดเศษยังเป็นค่าสมมติ ตัวเลขอาจต่างจากใบแจ้งยอดเล็กน้อย —
           เอาใบแจ้งยอด 1 ใบมาเทียบแล้วยืนยันได้
+        </p>
+      )}
+
+      {/* ⚠️ สัญญาที่จ่ายตามค่างวดแล้วไม่มีวันปิดหนี้ เกือบทั้งหมดคือข้อมูลที่กรอกผิด
+          ไม่ใช่สัญญาจริง — ธนาคารเขียนสัญญาแบบนั้นไม่ได้
+          ต้องเตือนที่หน้าสัญญา ไม่ใช่ให้ไปเจอตอนวางแผนโปะ
+          และต้องบอกว่าไปตรวจช่องไหน ไม่ใช่แค่บอกว่าผิด */}
+      {!plan.paidOff && (
+        <p className="mb-4 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
+          ⚠️ ค่างวดที่กรอกไว้ไม่พอจ่ายดอกเบี้ยหลังพ้นโปร จ่ายตามนี้อย่างเดียวหนี้จะไม่มีวันหมด
+          {contractAtTerm && (
+            <>
+              {' '}— ครบ {formatDuration(item.termMonths)} แล้วยังเหลือหนี้{' '}
+              {bahtRounded(contractAtTerm.balanceAfterFixed)} เพราะดอกเบี้ยงวดละ{' '}
+              {bahtRounded(contractAtTerm.interestFixed)} มากกว่าค่างวด{' '}
+              {baht(installmentNext, 0)}
+            </>
+          )}
+          {' '}ลองตรวจช่อง &quot;ค่างวดหลังพ้นโปร&quot; กับอัตราลอยตัวอีกครั้ง
+          ธนาคารมักขึ้นค่างวดหลังหมดโปร ถ้าปล่อยว่างไว้ระบบจะใช้ค่างวดเดิมยาวทั้งสัญญา
         </p>
       )}
 
@@ -298,6 +318,12 @@ export function LoanDetail({
           ถ้าตัวเลขไม่ตรงใบแจ้งยอด ให้ดู &quot;ช่วงคิดดอก&quot; กับ &quot;วัน&quot; ก่อน —
           ปัญหาเกือบทั้งหมดมาจากวันที่ ไม่ใช่สูตร
         </p>
+        {prepayPlan !== null && rows.some((r) => r.prepayFixed > 0n) && (
+          <p className="mb-3 rounded-md bg-[var(--color-principal-tint)] px-3 py-2 text-meta">
+            ตารางนี้กับสรุปรายปีคิดรวมแผนโปะที่บันทึกไว้แล้ว — แก้แผนได้ที่ปุ่ม
+            &quot;วางแผนโปะ&quot; ด้านบน
+          </p>
+        )}
         <ScheduleTable rows={rows} events={events} today={today} />
       </section>
     </Wrapper>
@@ -510,7 +536,11 @@ function PaymentSection({
               : ''
           }`}
         >
-          {full.payments.map((p) => (
+          {/* ใหม่สุดอยู่บน — รายการที่เพิ่งบันทึกคือสิ่งที่ผู้ใช้กำลังตรวจ
+              ห้าม sort ทับ full.payments เพราะ engine ต้องได้ลำดับตามเวลา */}
+          {[...full.payments]
+            .sort((a, b) => (a.paidDate < b.paidDate ? 1 : a.paidDate > b.paidDate ? -1 : 0))
+            .map((p) => (
             <li key={p.id} className="flex items-center justify-between gap-4 py-2">
               <span className="text-meta">
                 {formatThaiDate(p.paidDate)} ·{' '}
@@ -540,7 +570,7 @@ function PaymentSection({
                 </button>
               </span>
             </li>
-          ))}
+            ))}
         </ul>
       )}
     </section>
@@ -620,6 +650,9 @@ function ScheduleTable({
   events: readonly PaymentEvent[]
   today: ISODate
 }) {
+  /* คอลัมน์โปะโผล่เฉพาะตอนมีของให้โชว์ — สัญญาที่ไม่เคยโปะไม่ต้องแบกคอลัมน์ว่าง
+     บนจอ 380px ทุกคอลัมน์ที่เพิ่มคือการดันคอลัมน์อื่นออกนอกจอ */
+  const showPrepay = rows.some((r) => r.prepayFixed > 0n)
   const [showAll, setShowAll] = useState(false)
   // ใช้เกณฑ์เดียวกับการ์ดด้านบน ไม่งั้นแถวที่ไฮไลต์กับยอดคงเหลือชี้คนละงวด
   const currentIndex = settledPeriods(rows, events, today)
@@ -631,7 +664,7 @@ function ScheduleTable({
   return (
     <>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] border-collapse text-meta">
+        <table className="w-full min-w-[900px] border-collapse text-meta">
           {/* เรียงคอลัมน์ตามที่คนติดตามสินเชื่อใน Excel คุ้นเคย
               งวด → เดือน → อัตรา → ต้น → ดอก → ยอดชำระ → คงเหลือ
               คอลัมน์วันที่/จำนวนวันเป็นของไว้ไล่หาสาเหตุตอนกระทบยอด จึงย้ายไปท้าย */}
@@ -642,6 +675,7 @@ function ScheduleTable({
               <ThRight>อัตรา</ThRight>
               <ThRight>ชำระเงินต้น</ThRight>
               <ThRight>ชำระดอกเบี้ย</ThRight>
+              {showPrepay && <ThRight>โปะ</ThRight>}
               <ThRight>ยอดชำระ</ThRight>
               <ThRight>ยอดหนี้คงเหลือ</ThRight>
               <th className="py-2 pr-4 font-medium text-[var(--color-ink-2)]">ช่วงคิดดอก</th>
@@ -651,7 +685,11 @@ function ScheduleTable({
           <tbody>
             {view.map((r) => {
               const isActual = r.flags.includes('actual_payment')
-              const otherFlags = r.flags.filter((f) => f !== 'actual_payment')
+              // งวดที่ผ่านไปแล้วและไม่มีบันทึก ไม่ใช่ "คาด" — เป็นข้อเท็จจริงว่าไม่ได้จ่าย
+              const noRecord = r.flags.includes('no_payment_recorded')
+              const otherFlags = r.flags.filter(
+                (f) => f !== 'actual_payment' && f !== 'no_payment_recorded',
+              )
               return (
                 <tr
                   key={r.index}
@@ -672,28 +710,45 @@ function ScheduleTable({
                     )}
                   </td>
                   <TdRight>{pct(r.effectiveRateBps)}</TdRight>
-                  <TdRight>{bahtRounded(r.principalFixed)}</TdRight>
-                  <TdRight>{bahtRounded(r.interestFixed)}</TdRight>
+                  <TdRight>{bahtFixed(r.principalFixed)}</TdRight>
+                  <TdRight>{bahtFixed(r.interestFixed)}</TdRight>
+                  {showPrepay && (
+                    <TdRight>
+                      {r.prepayFixed > 0n ? (
+                        <span className="text-[var(--color-principal-dark)]">
+                          {bahtFixed(r.prepayFixed)}
+                        </span>
+                      ) : (
+                        <span className="text-[var(--color-ink-3)]">—</span>
+                      )}
+                    </TdRight>
+                  )}
                   <TdRight>
                     <span className={isActual ? 'font-medium' : ''}>
-                      {bahtRounded(r.paymentFixed)}
+                      {bahtFixed(r.paymentFixed)}
                     </span>
                     {/* แยกให้ชัดว่าแถวไหนมาจากยอดที่บันทึกจริง แถวไหนเป็นประมาณการ */}
                     <span
                       className={`ml-1 text-micro ${
-                        isActual ? 'text-[var(--color-ok)]' : 'text-[var(--color-ink-3)]'
+                        isActual
+                          ? 'text-[var(--color-ok)]'
+                          : noRecord
+                            ? 'text-[var(--color-warn)]'
+                            : 'text-[var(--color-ink-3)]'
                       }`}
                       title={
                         isActual
                           ? 'ยอดที่บันทึกว่าจ่ายจริง'
-                          : 'ประมาณการจากค่างวดตามสัญญา ยังไม่ได้บันทึกยอดจริง'
+                          : noRecord
+                            ? 'งวดนี้อยู่ในช่วงที่บันทึกการจ่ายไว้แล้ว แต่ไม่มีรายการของงวดนี้ — ถือว่าไม่ได้จ่าย เช่นงวดแรกที่สั้นมากจนธนาคารไปรวมเก็บกับงวดถัดไป'
+                            : 'ประมาณการจากค่างวดตามสัญญา ยังไม่ได้บันทึกยอดจริง'
                       }
                     >
-                      {isActual ? 'จริง' : 'คาด'}
+                      {isActual ? 'จริง' : noRecord ? 'ไม่มีบันทึก' : 'คาด'}
                     </span>
                   </TdRight>
                   <TdRight>
-                    {bahtRounded(r.balanceAfterFixed)}
+                    {bahtFixed(r.balanceAfterFixed)}
                     {otherFlags.length > 0 && (
                       <span className="ml-2 text-micro text-[var(--color-ink-3)]">
                         {otherFlags.map((f) => FLAG_LABELS[f] ?? f).join(' · ')}

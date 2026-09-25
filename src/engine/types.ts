@@ -95,6 +95,11 @@ export type PaymentEvent = {
 export type RowFlag =
   /** งวดนี้ใช้ยอดที่บันทึกว่าจ่ายจริง ไม่ใช่ค่างวดตามสัญญา */
   | 'actual_payment'
+  /**
+   * งวดนี้อยู่ในช่วงที่บันทึกการจ่ายไว้แล้ว แต่ไม่มีรายการของงวดนี้ = ไม่ได้จ่าย
+   * ต่างจากงวดอนาคตที่ยังไม่ถึงเวลา ซึ่งยังใช้ค่างวดตามสัญญาเป็นประมาณการ
+   */
+  | 'no_payment_recorded'
   | 'negative_amortization'
   | 'below_minimum'
   | 'rate_changed'

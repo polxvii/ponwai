@@ -59,6 +59,19 @@ export function buildSchedule(
   const actuals = [...events].filter((e) => e.kind !== 'partial_prepay').sort(byDate)
   let actualCursor = 0
 
+  /**
+   * วันที่ของยอดจ่ายจริงรายการสุดท้าย — เส้นแบ่งระหว่าง "อดีตที่รู้แล้ว" กับ "อนาคตที่ต้องเดา"
+   *
+   * ⚠️ งวดที่อยู่ก่อนเส้นนี้แต่ไม่มีรายการ แปลว่าไม่ได้จ่ายจริง ไม่ใช่ยังไม่ได้บันทึก
+   *    เคสจริง: งวดแรกกินเวลา 5 วัน ธนาคารไม่เรียกเก็บแยก ไปรวมกับงวดถัดไป
+   *    ถ้าเติมค่างวดเต็มให้งวดนั้น ตารางจะตัดเงินต้นที่ไม่เคยถูกจ่าย ยอดคงเหลือเพี้ยนทั้งเส้น
+   *
+   * ⛔ ห้ามใช้ "วันนี้" เป็นเส้นแบ่ง — คนที่หยุดบันทึกไปครึ่งปี
+   *    จะกลายเป็นค้างชำระ 6 งวดทันทีทั้งที่แค่ไม่ได้กรอก
+   *    เส้นต้องเป็นสิ่งที่ผู้ใช้ยืนยันเอง คือรายการล่าสุดที่บันทึกไว้
+   */
+  const lastActualDate = actuals[actuals.length - 1]?.date ?? null
+
   const rows: ScheduleRow[] = []
   let balance = toFixed(terms.principalSatang)
   let accruedCarried = ZERO_FIXED
@@ -143,8 +156,10 @@ export function buildSchedule(
     }
 
     const scheduled = findInstallment(terms.installmentSteps, period, terms.installmentSatang)
-    let payment = recorded ?? toFixed(scheduled)
+    const insideRecorded = lastActualDate !== null && due <= lastActualDate
+    let payment = recorded ?? (insideRecorded ? ZERO_FIXED : toFixed(scheduled))
     if (recorded !== null) flags.push('actual_payment')
+    else if (insideRecorded) flags.push('no_payment_recorded')
 
     const payoff = add(balance, accruedTotal)
     if (redeemed) payment = payoff
