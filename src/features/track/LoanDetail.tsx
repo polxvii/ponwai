@@ -594,7 +594,7 @@ function YearTable({ rows, axis }: { rows: readonly ScheduleRow[]; axis: GroupAx
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[560px] border-collapse text-row">
+      <table className="w-full min-w-[640px] border-collapse text-row">
         <thead>
           <tr className="border-b border-[var(--color-rule)] text-left">
             <th className="py-2 pr-4 text-meta font-medium text-[var(--color-ink-2)]">
@@ -603,6 +603,9 @@ function YearTable({ rows, axis }: { rows: readonly ScheduleRow[]; axis: GroupAx
             <ThRight>งวด</ThRight>
             <ThRight>ดอกเบี้ย</ThRight>
             <ThRight>เงินต้น</ThRight>
+            {/* เงินที่ออกจากบัญชีจริงทั้งปี = ดอกเบี้ย + เงินต้น (รวมยอดที่โปะแล้ว)
+                มีใน CSV มาตั้งแต่แรกแต่ไม่เคยโชว์บนจอ */}
+            <ThRight title="ดอกเบี้ย + เงินต้น รวมยอดที่โปะด้วย">ยอดจ่ายจริง</ThRight>
             <ThRight title="ถ่วงน้ำหนักด้วยยอดหนี้และจำนวนวัน ไม่ใช่ค่าเฉลี่ยเลขคณิต">
               อัตราที่จ่ายจริง
             </ThRight>
@@ -630,6 +633,9 @@ function YearTable({ rows, axis }: { rows: readonly ScheduleRow[]; axis: GroupAx
               <TdRight>{g.periodCount}</TdRight>
               <TdRight>{bahtRounded(g.interestFixed)}</TdRight>
               <TdRight>{bahtRounded(g.principalFixed)}</TdRight>
+              <TdRight>
+                <span className="font-medium">{bahtRounded(g.paymentFixed)}</span>
+              </TdRight>
               <TdRight>{pct(g.effectiveRateBps)}</TdRight>
               <TdRight>{bahtRounded(g.closingBalanceFixed)}</TdRight>
             </tr>
@@ -778,8 +784,9 @@ function ScheduleTable({
               const isActual = r.flags.includes('actual_payment')
               // งวดที่ผ่านไปแล้วและไม่มีบันทึก ไม่ใช่ "คาด" — เป็นข้อเท็จจริงว่าไม่ได้จ่าย
               const noRecord = r.flags.includes('no_payment_recorded')
+              // 'prepay' ไม่ต้องติดป้าย — คอลัมน์โปะบอกยอดอยู่แล้ว ป้ายซ้ำเปลืองที่บนจอแคบ
               const otherFlags = r.flags.filter(
-                (f) => f !== 'actual_payment' && f !== 'no_payment_recorded',
+                (f) => f !== 'actual_payment' && f !== 'no_payment_recorded' && f !== 'prepay',
               )
               return (
                 <tr
