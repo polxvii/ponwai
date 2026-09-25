@@ -9,6 +9,10 @@
  *    แต่เปิดกางไว้เองเมื่อมีค่าอยู่แล้ว ไม่งั้นค่าที่กรอกไว้จะหายไปจากสายตา
  * ⚠️ ช่องเรตที่เว้นว่างไม่นับเป็นช่วง จึงไม่แสดงช่องค่างวดของปีนั้น
  *    ขอบเขตเดือนของสองชุดต้องตรงกันเสมอ
+ *
+ * ⛔ ต้องบอกให้รู้เมื่อยังไม่มีช่องรายปีให้กรอก
+ *    ฟอร์มเปล่าจะกางออกมาเจอแค่ "ค่างวดหลังพ้นโปร" ช่องเดียว
+ *    ผู้ใช้อ่านว่าฟีเจอร์ไม่มีจริง ทั้งที่แค่ยังไม่ได้กรอกเรตของปีนั้น
  */
 
 import { Field, NumberField } from '@/components/Field'
@@ -34,6 +38,7 @@ export function InstallmentBands({
     promoInstallments.some((v) => typeof v === 'number') ||
     typeof floatingInstallment === 'number'
   const ph = fallback === '' ? '' : String(fallback)
+  const noBands = !promoRates.some((r) => typeof r === 'number')
 
   const setPromo = (i: number, v: number | '') => {
     const next = [...promoInstallments]
@@ -44,11 +49,18 @@ export function InstallmentBands({
   return (
     <details className="mt-3" open={hasAny}>
       <summary className="tap cursor-pointer text-meta text-[var(--color-ink-2)]">
-        ค่างวดต่างกันตามช่วง
+        ค่างวดแต่ละปีไม่เท่ากัน
         <span className="ml-2 text-micro text-[var(--color-ink-3)]">
           เว้นว่าง = ใช้ค่างวดด้านบนทุกช่วง
         </span>
       </summary>
+
+      {noBands && (
+        <p className="mt-3 text-meta text-[var(--color-ink-3)]">
+          กรอกเรตโปรปีที่ 1–3 ด้านบนก่อน แล้วช่องค่างวดของปีนั้นจะขึ้นมาให้กรอกตรงนี้ —
+          ช่วงของค่างวดต้องตรงกับช่วงของเรตเสมอ
+        </p>
+      )}
 
       <div className="mt-3 grid grid-cols-2 gap-2">
         {promoRates.map((r, i) =>
