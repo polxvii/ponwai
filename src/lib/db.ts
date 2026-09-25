@@ -918,11 +918,73 @@ export async function applyDateRule(
 
 // ---------- วันหยุดธนาคาร ----------
 
+export type BankHoliday = {
+  date: ISODate
+  name: string | null
+  /** true = แถวของกลางที่ seed มาให้ ลบไม่ได้ ปิดได้อย่างเดียว */
+  seeded: boolean
+  /** false = ผู้ใช้สั่งไม่นับวันนี้เป็นวันหยุด */
+  enabled: boolean
+}
+
+/** วันหยุดที่ "มีผลจริง" กับผู้ใช้คนนี้ — ตัดวันที่ถูกปิดออกแล้ว */
 export async function listBankHolidays(): Promise<{ date: ISODate; name: string | null }[]> {
-  const rows = must(
-    await supabase.from('bank_holidays').select('holiday_date, name_th').order('holiday_date'),
-  ) as { holiday_date: string; name_th: string | null }[]
-  return rows.map((r) => ({ date: isoDate(r.holiday_date), name: r.name_th }))
+  const all = await listBankHolidaysFull()
+  return all.filter((h) => h.enabled).map((h) => ({ date: h.date, name: h.name }))
+}
+
+/**
+ * รายการทั้งหมดพร้อมสถานะ สำหรับหน้าตั้งค่า
+ *
+ * ⚠️ แถวของกลางกับของผู้ใช้อาจเป็นวันเดียวกันได้ (unique index แยกกัน)
+ *    ยุบเป็นวันละรายการ โดยถือว่าเป็น "ของผู้ใช้" ถ้ามีแถวของผู้ใช้อยู่ด้วย
+ *    ไม่งั้นจะเห็นวันเดียวกันสองบรรทัดและกดปิดไม่ได้ผลเพราะอีกแถวยังอยู่
+ */
+export async function listBankHolidaysFull(): Promise<BankHoliday[]> {
+  const [rows, outs] = await Promise.all([
+    supabase.from('bank_holidays').select('holiday_date, name_th, user_id').order('holiday_date'),
+    supabase.from('bank_holiday_optouts').select('holiday_date'),
+  ])
+  if (rows.error) throw new Error(translateDbError(rows.error))
+  // ตารางปิดวันหยุดอาจยังไม่ถูก migrate — ถือว่าไม่มีใครปิดอะไรไว้ ดีกว่าทั้งหน้าพัง
+  const off = new Set(
+    outs.error ? [] : ((outs.data ?? []) as { holiday_date: string }[]).map((o) => o.holiday_date),
+  )
+
+  const byDate = new Map<string, BankHoliday>()
+  for (const r of (rows.data ?? []) as { holiday_date: string; name_th: string | null; user_id: string | null }[]) {
+    const prev = byDate.get(r.holiday_date)
+    byDate.set(r.holiday_date, {
+      date: isoDate(r.holiday_date),
+      name: r.name_th ?? prev?.name ?? null,
+      seeded: (prev?.seeded ?? true) && r.user_id === null,
+      enabled: !off.has(r.holiday_date),
+    })
+  }
+  return [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+}
+
+/** เปิด/ปิดวันหยุดเฉพาะของผู้ใช้คนนี้ ไม่แตะแถวของกลาง */
+export async function setBankHolidayEnabled(date: ISODate, enabled: boolean): Promise<void> {
+  const uid = await currentUserId()
+  const res = enabled
+    ? await supabase.from('bank_holiday_optouts').delete().eq('user_id', uid).eq('holiday_date', date)
+    : await supabase.from('bank_holiday_optouts').insert({ user_id: uid, holiday_date: date })
+  if (res.error) throw new Error(translateDbError(res.error))
+}
+
+/**
+ * ลบวันหยุดที่ผู้ใช้เพิ่มเอง
+ * ⛔ แถวของกลางลบไม่ได้ RLS ปฏิเสธอยู่แล้ว แต่ต้องดักที่นี่ให้ได้ข้อความภาษาคน
+ */
+export async function removeBankHoliday(date: ISODate): Promise<void> {
+  const uid = await currentUserId()
+  const res = await supabase
+    .from('bank_holidays')
+    .delete()
+    .eq('user_id', uid)
+    .eq('holiday_date', date)
+  if (res.error) throw new Error(translateDbError(res.error))
 }
 
 export async function addBankHoliday(date: ISODate, name: string): Promise<void> {

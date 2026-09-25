@@ -23,6 +23,7 @@ import {
 import { baht as toSatang, type Satang } from '@engine/money.js'
 import { isoDate, type ISODate } from '@engine/date.js'
 import { Field, NumberField, TextField, DateField } from '@/components/Field'
+import { HolidayCalendar } from '@/components/HolidayCalendar'
 import { baht, formatThaiDate } from '@/lib/format'
 import { downloadCsv, reconCsv, reportName } from '@/lib/export'
 import {
@@ -85,7 +86,8 @@ export function ReconcilePage({
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [holidays, setHolidays] = useState<{ date: ISODate; name: string | null }[]>([])
-  const [holidayDraft, setHolidayDraft] = useState({ date: today, name: '' })
+  /** ขยับเมื่อปฏิทินวันหยุดเปลี่ยน เพื่อให้โหลดสัญญากับตารางใหม่ */
+  const [holidayKey, setHolidayKey] = useState(0)
 
   const terms = useMemo(() => toLoanTerms(full), [full])
   const events = useMemo(() => toPaymentEvents(full), [full])
@@ -170,19 +172,6 @@ export function ReconcilePage({
       )
       setNote('บันทึกแล้ว — ตารางผ่อนจะคิดด้วยวิธีนี้ต่อไป และคำเตือน "ค่าสมมติ" จะหายไป')
       onApplied()
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function addHoliday() {
-    setBusy(true)
-    try {
-      await addBankHoliday(holidayDraft.date, holidayDraft.name)
-      setHolidayDraft({ date: today, name: '' })
-      reload()
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -397,44 +386,10 @@ export function ReconcilePage({
 
       {/* ---------- ปฏิทินวันหยุดธนาคาร ---------- */}
       <section className="mt-8 rounded-lg border border-[var(--color-rule)] p-4">
-        <h2 className="text-row">ปฏิทินวันหยุดธนาคาร</h2>
-        <p className="mt-1 text-meta text-[var(--color-ink-2)]">
-          กฎอัตโนมัติไม่มีวันครอบคลุมครบ วันหยุดพิเศษที่ ครม. ประกาศกะทันหันจะหลุดเสมอ —
-          ใส่เองได้ แล้วเลือกปฏิทินแบบ &quot;เสาร์–อาทิตย์ + วันหยุดธนาคาร&quot;
-        </p>
-
-        <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-          <Field label="วันที่" hint={formatThaiDate(holidayDraft.date, 'long')}>
-            <DateField
-              value={holidayDraft.date}
-              onChange={(v) => setHolidayDraft({ ...holidayDraft, date: isoDate(v) })}
-            />
-          </Field>
-          <Field label="ชื่อวันหยุด">
-            <TextField
-              value={holidayDraft.name}
-              onChange={(v) => setHolidayDraft({ ...holidayDraft, name: v })}
-              placeholder="เช่น วันหยุดพิเศษ ครม."
-            />
-          </Field>
-          <button
-            onClick={() => void addHoliday()}
-            disabled={busy}
-            className="tap self-end rounded-md border border-[var(--color-rule)] px-4 py-2.5 disabled:opacity-50"
-          >
-            เพิ่ม
-          </button>
-        </div>
-
-        {holidays.length > 0 && (
-          <p className="mt-3 text-meta text-[var(--color-ink-2)]">
-            มีอยู่ {holidays.length} วัน · ล่าสุด{' '}
-            {holidays
-              .slice(-4)
-              .map((h) => formatThaiDate(h.date))
-              .join(', ')}
-          </p>
-        )}
+        <h2 className="mb-1 text-row">ปฏิทินวันหยุดธนาคาร</h2>
+        {/* โหลดตารางใหม่ทุกครั้งที่ปฏิทินเปลี่ยน — วันหยุดเปลี่ยนวันตัดงวด
+            ถ้าไม่รีโหลด ผู้ใช้จะติ๊กแล้วเห็นตารางเดิมแล้วนึกว่าไม่มีผล */}
+        <HolidayCalendar onChanged={() => setHolidayKey((k: number) => k + 1)} />
       </section>
     </div>
   )
