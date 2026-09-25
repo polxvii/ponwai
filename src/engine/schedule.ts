@@ -90,31 +90,89 @@ export function buildSchedule(
     const step = findRateStep(terms.rateSteps, period)
     const flags: RowFlag[] = []
     if (terms.scheduleOverrides[period] !== undefined) flags.push('date_overridden')
+    // ---- accrue ตั้งแต่งวดก่อนถึงวันตัด โดยตัดช่วงทุกครั้งที่มีเงินเข้ากลางงวด ----
+    const conv = resolveConvention(terms.conventions, due)
 
-    // ---- accrue ตั้งแต่งวดก่อนถึงวันตัด โดยตัดช่วงที่การโปะกลางงวด ----
-    let periodInterest = ZERO_FIXED
+    let periodInterest = ZERO_FIXED   // ดอกทั้งงวด รวมส่วนที่ถูกตัดไปแล้วกลางงวด
+    let unrounded = ZERO_FIXED        // ดอกที่ยังไม่ถูกปัด นับตั้งแต่จุดตัดชำระล่าสุด
     let prepayThisPeriod = ZERO_FIXED
+    let earlyInterest = ZERO_FIXED    // ดอกที่ยอดจ่ายก่อนวันตัดชำระไปแล้ว
+    let earlyPrincipal = ZERO_FIXED
+    let earlyPayment = ZERO_FIXED
     let segFrom = from
 
-    // งวดนี้ครอบคลุมการโปะในช่วง (from, due] — โปะที่ตรงวันตัดพอดีก็นับเป็นของงวดนี้
-    // ดอกเบี้ยของงวดคิดจากเงินต้นก่อนโปะไปแล้ว การโปะจึงตัดต้นได้เต็มจำนวน
+    // ---- ยอดจ่ายจริงของงวดนี้ ถ้ามีบันทึกไว้ ----
+    let recorded: Fixed | null = null
+    let redeemed = false
+
+    /**
+     * เหตุการณ์กลางงวดเรียงตามวัน — โปะกับยอดจ่ายจริงต้องปนกันให้ถูกลำดับ
+     * ไม่งั้นเงินต้นลดผิดจังหวะ แล้วดอกช่วงที่เหลือของงวดคลาดไปทั้งเส้น
+     *
+     * ⚠️ ยอดจ่ายจริงที่ลงก่อนวันตัดต้องตัดดอก ณ วันนั้นเลย ห้ามยกไปรวมที่วันตัด
+     *    สลิปธนาคารยืนยัน: จ่ายค่างวด 37,000 วันที่ 3 แล้วโอนอีก 43,000 วันที่ 5
+     *    ธนาคารคิด 29 วันบนยอดเต็ม + 2 วันบนยอดที่ลดแล้ว ไม่ใช่ 31 วันบนยอดเต็ม
+     *    ต่างกัน 3.13 บาท = ดอก 2 วันของเงินต้นที่จ่ายไปตั้งแต่วันที่ 3 (TV-51)
+     */
+    const mid: Array<{ date: ISODate; amount: Fixed; prepay: boolean }> = []
+
     while (prepayCursor < prepays.length) {
       const ev = prepays[prepayCursor]!
       if (ev.date > due) break
-      if (ev.date <= segFrom) { prepayCursor++; continue }
-
-      periodInterest = add(periodInterest, accrueSpan(terms, balance, segFrom, ev.date, step))
-      // การโปะตัดเงินต้นโดยตรง ณ วันที่จ่ายจริง — นี่คือจุดที่ daily engine ให้ค่ามากกว่า monthly
-      const amt = toFixed(ev.amountSatang)
-      const applied = amt > balance ? balance : amt   // ห้ามตัดเกินหนี้ ห้ามคืนเงินทอน (TV-23)
-      balance = sub(balance, applied)
-      prepayThisPeriod = add(prepayThisPeriod, applied)
-      flags.push('prepay')
-      segFrom = ev.date
       prepayCursor++
+      // ⛔ เทียบกับ from ไม่ใช่ segFrom — โปะสองก้อนวันเดียวกันต้องนับครบทั้งคู่
+      if (ev.date <= from) continue
+      mid.push({ date: ev.date, amount: toFixed(ev.amountSatang), prepay: true })
     }
 
-    periodInterest = add(periodInterest, accrueSpan(terms, balance, segFrom, due, step))
+    while (actualCursor < actuals.length) {
+      const ev = actuals[actualCursor]!
+      if (ev.date > due) break
+      actualCursor++
+      if (ev.date <= from) continue
+      // หลายรายการในงวดเดียวกันให้บวกรวม เช่น จ่ายค่างวดแล้วโอนเพิ่มทีหลัง
+      recorded = add(recorded ?? ZERO_FIXED, toFixed(ev.amountSatang))
+      // ⛔ ปิดบัญชีต้องตัดที่วันตัดตามเดิม ยอดปิดคิดจากดอกที่ครบงวดแล้วเท่านั้น
+      if (ev.kind === 'full_redemption') redeemed = true
+      else if (ev.date < due) {
+        mid.push({ date: ev.date, amount: toFixed(ev.amountSatang), prepay: false })
+      }
+    }
+
+    mid.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+
+    for (const ev of mid) {
+      unrounded = add(unrounded, accrueSpan(terms, balance, segFrom, ev.date, step))
+      segFrom = ev.date
+
+      if (ev.prepay) {
+        // การโปะตัดเงินต้นโดยตรงเต็มจำนวน ไม่หักดอกก่อน
+        // นี่คือจุดที่ daily engine ให้ค่ามากกว่า monthly
+        const applied = ev.amount > balance ? balance : ev.amount  // ห้ามตัดเกินหนี้ (TV-23)
+        balance = sub(balance, applied)
+        prepayThisPeriod = add(prepayThisPeriod, applied)
+        if (!flags.includes('prepay')) flags.push('prepay')
+        continue
+      }
+
+      // ยอดจ่ายจริงตัดดอกที่ค้างอยู่ ณ วันนั้นก่อน ที่เหลือจึงเข้าเงินต้น (ข้อ 1.2)
+      const chunk = roundFixed(unrounded, conv.rounding)
+      periodInterest = add(periodInterest, chunk)
+      unrounded = ZERO_FIXED
+
+      const owed = add(accruedCarried, chunk)
+      const toInterest = ev.amount < owed ? ev.amount : owed
+      const toPrincipal = sub(ev.amount, toInterest)
+      const applied = toPrincipal > balance ? balance : toPrincipal
+      balance = sub(balance, applied)
+      accruedCarried = sub(owed, toInterest)
+      earlyInterest = add(earlyInterest, toInterest)
+      earlyPrincipal = add(earlyPrincipal, applied)
+      earlyPayment = add(earlyPayment, ev.amount)
+      if (!flags.includes('early_payment')) flags.push('early_payment')
+    }
+
+    unrounded = add(unrounded, accrueSpan(terms, balance, segFrom, due, step))
 
     // ---- ยอดโปะจากแผน (ข้อ 3.4) ตกที่วันตัดยอดเสมอ ----
     // ดอกเบี้ยของงวดคิดเสร็จแล้วจากเงินต้นก่อนโปะ การโปะจึงตัดต้นได้เต็ม
@@ -130,9 +188,10 @@ export function buildSchedule(
       }
     }
 
-    // ---- ปัดเศษครั้งเดียว ณ จุดตัดชำระ (spec ข้อ 3.3) ----
-    const conv = resolveConvention(terms.conventions, due)
-    periodInterest = roundFixed(periodInterest, conv.rounding)
+    // ---- ปัดเศษครั้งเดียวต่อหนึ่งจุดตัดชำระ (spec ข้อ 3.3) ----
+    // งวดที่จ่ายก้อนเดียวตรงวันตัดจึงปัดครั้งเดียวเท่าเดิม ผลไม่เปลี่ยน
+    const tail = roundFixed(unrounded, conv.rounding)
+    periodInterest = add(periodInterest, tail)
 
     const rateNow = resolveRate(step, terms.referenceRates, due)
     if (prevRateBps !== null && rateNow !== prevRateBps) flags.push('rate_changed')
@@ -140,41 +199,37 @@ export function buildSchedule(
     prevRateBps = rateNow
     prevBasis = conv.dayCountBasis
 
-    // ---- ตัดชำระ ----
-    const accruedTotal = add(accruedCarried, periodInterest)
-
-    // ---- ยอดจ่ายจริงของงวดนี้ ถ้ามีบันทึกไว้ ----
-    let recorded: Fixed | null = null
-    let redeemed = false
-    while (actualCursor < actuals.length) {
-      const ev = actuals[actualCursor]!
-      if (ev.date > due) break
-      if (ev.date <= from) { actualCursor++; continue }
-      // หลายรายการในงวดเดียวกันให้บวกรวม เช่น จ่ายค่างวดแล้วโอนเพิ่มทีหลัง
-      recorded = add(recorded ?? ZERO_FIXED, toFixed(ev.amountSatang))
-      if (ev.kind === 'full_redemption') redeemed = true
-      actualCursor++
-    }
+    // ---- ตัดชำระ ณ วันตัด ----
+    // ดอกที่ยังค้างจริง = ที่ยกมา + ช่วงท้ายงวด ส่วนที่ถูกตัดไปแล้วกลางงวดไม่นับซ้ำ
+    const accruedTotal = add(accruedCarried, tail)
 
     const scheduled = findInstallment(terms.installmentSteps, period, terms.installmentSatang)
     const insideRecorded = lastActualDate !== null && due <= lastActualDate
-    let payment = recorded ?? (insideRecorded ? ZERO_FIXED : toFixed(scheduled))
+    const payment = recorded ?? (insideRecorded ? ZERO_FIXED : toFixed(scheduled))
     if (recorded !== null) flags.push('actual_payment')
     else if (insideRecorded) flags.push('no_payment_recorded')
 
+    // เงินที่เหลือให้ตัด ณ วันตัด — ส่วนที่จ่ายไปก่อนหน้าถูกใช้ไปแล้ว ห้ามนับซ้ำ
+    let atDue = sub(payment, earlyPayment)
+    if (atDue < 0n) atDue = ZERO_FIXED
+
     const payoff = add(balance, accruedTotal)
-    if (redeemed) payment = payoff
-    if (payment >= payoff) {
-      payment = payoff
+    if (redeemed) atDue = payoff
+    if (atDue >= payoff) {
+      atDue = payoff
       flags.push('final_payment')
       paidOff = true
     }
 
-    const interestPaid = payment < accruedTotal ? payment : accruedTotal
-    const shortfall = sub(accruedTotal, interestPaid)
-    const principalPaid = sub(payment, interestPaid)
+    const interestAtDue = atDue < accruedTotal ? atDue : accruedTotal
+    const shortfall = sub(accruedTotal, interestAtDue)
+    const principalAtDue = sub(atDue, interestAtDue)
 
-    balance = sub(balance, principalPaid)
+    balance = sub(balance, principalAtDue)
+
+    const paymentTotal = add(earlyPayment, atDue)
+    const interestPaid = add(earlyInterest, interestAtDue)
+    const principalPaid = add(earlyPrincipal, principalAtDue)
 
     if (shortfall > 0n) {
       flags.push('negative_amortization')
@@ -197,7 +252,7 @@ export function buildSchedule(
       accrualFrom: from,
       accrualDays: days,
       effectiveRateBps: effectiveRate(periodInterest, balance, principalPaid, prepayThisPeriod, days),
-      paymentFixed: add(payment, prepayThisPeriod),
+      paymentFixed: add(paymentTotal, prepayThisPeriod),
       prepayFixed: prepayThisPeriod,
       interestFixed: periodInterest,
       interestPaidFixed: interestPaid,

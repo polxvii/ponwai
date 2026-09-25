@@ -654,6 +654,7 @@ const FLAG_LABELS: Record<string, string> = {
   prepay: 'มีโปะ',
   final_payment: 'งวดสุดท้าย',
   date_overridden: 'แก้วันตัด',
+  early_payment: 'จ่ายก่อนวันตัด',
   convention_changed: 'เปลี่ยนวิธีคิด',
 }
 
