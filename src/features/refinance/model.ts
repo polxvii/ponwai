@@ -7,19 +7,21 @@
 
 import { baht, bps, type Satang } from '@engine/money.js'
 import { isoDate, type ISODate } from '@engine/date.js'
-import { rateStepsFromYearlyRates, defaultImportConvention } from '@engine/import.js'
+import {
+  installmentStepsFromYearly, rateStepsFromYearlyRates, defaultImportConvention,
+} from '@engine/import.js'
 import {
   movingCost, prepayPenalty,
   type RefinanceContext, type RefinanceScenario,
 } from '@engine/refinance.js'
-import type { RateStep } from '@engine/types.js'
+import type { InstallmentStep, RateStep } from '@engine/types.js'
 import { buildSchedule } from '@engine/schedule.js'
 import { findInstallment, findRateStep, resolveRate } from '@engine/rates.js'
 import { FIXED_SCALE } from '@engine/money.js'
 import { balanceOn, settledPeriods } from '@/lib/progress'
 import { toLoanTerms, toPaymentEvents, type LoanFull } from '@/lib/db'
 import { mergeShape } from '@/lib/persist'
-import { NO_BANK, OTHER_BANK, bankName, promoGap } from '../compare/model'
+import { NO_BANK, OTHER_BANK, bankName, promoGap, type OfferDraft } from '../compare/model'
 
 /** ชื่อที่จะโชว์ในตาราง — ผู้ให้กู้ที่ไม่อยู่ในรายการให้พิมพ์เอง */
 export function refiBankName(r: RefiDraft): string {
@@ -52,6 +54,9 @@ export type RetentionDraft = {
   floatingRate: number | ''
   /** ค่าดำเนินการ retention ปกติหลักพัน บางแห่งฟรี */
   fee: number | ''
+  /** ค่างวดของแต่ละช่วง เว้นว่าง = จ่ายเท่าเดิมกับที่ผ่อนอยู่ */
+  promoInstallments: (number | '')[]
+  floatingInstallment: number | ''
 }
 
 /** ข้อเสนอจากธนาคารใหม่ */
@@ -63,6 +68,9 @@ export type RefiDraft = {
   floatingRate: number | ''
   /** ค่างวดตามใบเสนอของธนาคารใหม่ */
   installment: number | ''
+  /** ค่างวดของแต่ละช่วง เว้นว่าง = ใช้ค่างวดตามใบเสนอด้านบน */
+  promoInstallments: (number | '')[]
+  floatingInstallment: number | ''
   /** เทอมใหม่ เป็นปี — มักถูกยืดกลับไป 30 ปี ซึ่งเป็นกับดัก (ข้อ 2A.2) */
   termYears: number | ''
   lockinMonths: number
@@ -109,6 +117,8 @@ export const EMPTY_RETENTION: RetentionDraft = {
   promoRates: ['', '', ''],
   floatingRate: '',
   fee: '',
+  promoInstallments: ['', '', ''],
+  floatingInstallment: '',
 }
 
 export const EMPTY_REFI: RefiDraft = {
@@ -117,6 +127,8 @@ export const EMPTY_REFI: RefiDraft = {
   promoRates: ['', '', ''],
   floatingRate: '',
   installment: '',
+  promoInstallments: ['', '', ''],
+  floatingInstallment: '',
   termYears: '',
   lockinMonths: 36,
   mortgageFeePct: 1,
@@ -134,6 +146,27 @@ const num = (v: number | '' | undefined): number => (typeof v === 'number' ? v :
 /** baht() รับทศนิยมไม่เกิน 2 ตำแหน่ง — ค่าที่มาจาก % หรือจากที่ผู้ใช้พิมพ์เองต้องปัดก่อน */
 const toSatang = (n: number): Satang => baht(Math.round(n * 100) / 100)
 const sat = (v: number | '' | undefined): Satang => toSatang(num(v))
+/** เว้นว่าง = ไม่กำหนดค่างวดเฉพาะช่วง ให้ตกไปใช้ค่างวดหลัก */
+const payOf = (v: number | '' | undefined): Satang | null =>
+  typeof v === 'number' && v > 0 ? toSatang(v) : null
+
+/**
+ * ช่วงค่างวดที่ยาวตรงกับช่วงเรตเสมอ
+ * ⚠️ ต้อง filter ด้วยเงื่อนไขเดียวกับ stepsOf ไม่งั้นขอบเขตเดือนของสองชุดเหลื่อมกัน
+ */
+function paySteps(
+  rates: readonly (number | '')[],
+  pays: readonly (number | '')[] | undefined,
+  floatingPay: number | '' | undefined,
+): InstallmentStep[] {
+  const list = pays ?? []
+  return installmentStepsFromYearly(
+    rates
+      .map((r, i) => (typeof r === 'number' ? payOf(list[i]) : null))
+      .filter((_, i) => typeof rates[i] === 'number'),
+    payOf(floatingPay),
+  )
+}
 const rate = (v: number | '' | undefined) => bps(Math.round(num(v) * 100))
 
 function stepsOf(promo: (number | '')[], floating: number | ''): RateStep[] {
@@ -206,6 +239,7 @@ export function buildScenarios(
       label: 'ขอลดดอกกับธนาคารเดิม (retention)',
       rateSteps: stepsOf(ret.promoRates, ret.floatingRate),
       installmentSatang: sat(c.installment),
+      installmentSteps: paySteps(ret.promoRates, ret.promoInstallments, ret.floatingInstallment),
       termMonths: num(c.remainingMonths),
       movingCostSatang: sat(ret.fee),
       lockinMonths: 36,
@@ -214,12 +248,14 @@ export function buildScenarios(
 
   const cost = refiMovingCost(c, r)
   const refiSteps = stepsOf(r.promoRates, r.floatingRate)
+  const refiPaySteps = paySteps(r.promoRates, r.promoInstallments, r.floatingInstallment)
 
   out.push({
     kind: 'refinance',
     label: `ย้ายไป${refiBankName(r)} ค่างวด ${num(r.installment).toLocaleString('en-US')} / ${num(r.termYears)} ปี`,
     rateSteps: refiSteps,
     installmentSatang: sat(r.installment),
+    installmentSteps: refiPaySteps,
     termMonths: num(r.termYears) * 12,
     movingCostSatang: cost,
     lockinMonths: r.lockinMonths,
@@ -342,11 +378,17 @@ export const reviveCurrent = (today: ISODate) => (raw: unknown) => {
 export const reviveRetention = (raw: unknown) => {
   const merged = mergeShape(raw, EMPTY_RETENTION)
   if (merged && !Array.isArray(merged.promoRates)) merged.promoRates = EMPTY_RETENTION.promoRates
+  if (merged && !Array.isArray(merged.promoInstallments)) {
+    merged.promoInstallments = [...EMPTY_RETENTION.promoInstallments]
+  }
   return merged
 }
 export const reviveRefi = (raw: unknown) => {
   const merged = mergeShape(raw, EMPTY_REFI)
   if (merged && !Array.isArray(merged.promoRates)) merged.promoRates = EMPTY_REFI.promoRates
+  if (merged && !Array.isArray(merged.promoInstallments)) {
+    merged.promoInstallments = [...EMPTY_REFI.promoInstallments]
+  }
   return merged
 }
 
@@ -390,5 +432,34 @@ export function currentFromLoan(full: LoanFull, today: ISODate): CurrentPrefill 
       Number(findInstallment(terms.installmentSteps, next, terms.installmentSatang)) / 100,
     currentRate: Number(resolveRate(step, terms.referenceRates, today)) / 100,
     remainingMonths: Math.max(0, rows.length - settled),
+  }
+}
+
+/**
+ * แปลงใบเสนอจากหน้าเปรียบเทียบ มาเป็นข้อเสนอของธนาคารใหม่
+ *
+ * ⛔ ไม่แตะ termYears กับ lockinMonths ที่ผู้ใช้ตั้งไว้แล้ว
+ *    เทอมอยู่ใน "เงื่อนไขร่วม" ของหน้าเปรียบเทียบ ไม่ใช่ของใบเสนอ
+ *    การเดาแทนจะเปลี่ยนคำตอบเรื่องกับดักยืดเทอม ซึ่งเป็นหัวใจของหน้านี้ (ข้อ 2A.2)
+ *
+ * ⚠️ ค่าธรรมเนียมบางตัวของหน้าเปรียบเทียบไม่มีที่ลงในหน้านี้
+ *    (เพดานยกเว้นค่าจดจำนอง, ส่วนลดเรตจาก MRTA, ปีที่ยกเว้นประกันอัคคีภัย)
+ *    ตกไปเงียบ ๆ ดีกว่ายัดลงช่องที่ความหมายไม่ตรงกัน
+ */
+export function refiFromOffer(d: OfferDraft): Partial<RefiDraft> {
+  return {
+    bankCode: d.bankCode,
+    customName: d.customName,
+    promoRates: [...d.promoRates],
+    floatingRate: d.floatingRate,
+    installment: d.installment,
+    promoInstallments: [...d.promoInstallments],
+    floatingInstallment: d.floatingInstallment,
+    mortgageFeePct: d.mortgageFeePct,
+    stampDuty: d.stampDuty,
+    appraisalFee: d.appraisalFee,
+    otherFee: d.otherFee,
+    newMrtaPremium: d.mrtaPremium,
+    newFirePremium: d.firePremium,
   }
 }

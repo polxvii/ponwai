@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { rankOffers, sensitivityBand, findRankFlips } from '@engine/compare.js'
 import { baht as toSatang } from '@engine/money.js'
+import { InstallmentBands } from '@/components/InstallmentBands'
 import { Field, NumberField, SelectField, TextField, Toggle } from '@/components/Field'
 import { formatDuration } from '@/lib/format'
 import { useLocalState } from '@/lib/persist'
@@ -332,6 +333,22 @@ function OfferForm({
           <NumberField value={draft.installment} onChange={(v) => onChange({ installment: v })} />
         </Field>
       </div>
+
+      {/* ⚠️ โหมดจ่ายเท่ากันบังคับทุกใบจ่ายเท่ากันเพื่อเทียบบนฐานเดียว
+          ค่างวดรายช่วงจึงถูกปิดไปทั้งชุด ต้องบอกไม่ใช่ปล่อยให้กรอกแล้วไม่มีผล */}
+      {lockedPayment === null ? (
+        <InstallmentBands
+          promoRates={draft.promoRates}
+          promoInstallments={draft.promoInstallments}
+          floatingInstallment={draft.floatingInstallment}
+          fallback={draft.installment}
+          onChange={onChange}
+        />
+      ) : (
+        <p className="mt-3 text-micro text-[var(--color-ink-3)]">
+          โหมดจ่ายเท่ากันเปิดอยู่ ค่างวดรายช่วงถูกพักไว้ทุกใบเสนอ
+        </p>
+      )}
 
       <details className="mt-3">
         <summary className="tap cursor-pointer text-meta text-[var(--color-ink-2)]">

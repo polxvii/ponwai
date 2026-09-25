@@ -24,6 +24,7 @@ import {
 import { xirrBps, type DatedFlow } from './xirr.js'
 import type {
   LoanTerms, RateStep, ReferenceRate, LoanConvention, DateRoll, RollCalendar, ScheduleRow,
+  InstallmentStep,
 } from './types.js'
 
 export type LoanOffer = {
@@ -41,6 +42,11 @@ export type LoanOffer = {
 
   /** ค่างวดจากใบเสนอ */
   installmentQuotedSatang: Satang
+  /**
+   * ค่างวดที่ต่างกันตามช่วง — ธนาคารมักคิดค่างวดช่วงโปรต่ำกว่าช่วงลอยตัว
+   * ว่าง = ใช้ installmentQuotedSatang ตลอดสัญญาเหมือนเดิม
+   */
+  installmentSteps?: readonly InstallmentStep[]
 
   fees: readonly OfferFee[]
   fireInsurance?: RecurringInsurance
@@ -98,8 +104,22 @@ export type EvaluateOptions = {
   horizonMonths?: number
 }
 
-function toTerms(offer: LoanOffer, principal: Satang, installment: Satang): LoanTerms {
+/**
+ * @param steps ส่งมาเฉพาะตอนใช้ค่างวดของใบเสนอจริง
+ *
+ * ⛔ Equal-Payment Mode ต้องส่ง undefined เสมอ
+ *    โหมดนั้นบังคับทุกข้อเสนอจ่ายเท่ากันเพื่อให้เทียบกันได้ตรง ๆ
+ *    ถ้าปล่อยให้ค่างวดรายช่วงมาทับ แต่ละใบจะจ่ายไม่เท่ากันอีก
+ *    ตัวเลขที่ได้จะไม่ใช่การเปรียบเทียบบนฐานเดียวกัน แต่ไม่มีอะไรบนจอบอก
+ */
+function toTerms(
+  offer: LoanOffer,
+  principal: Satang,
+  installment: Satang,
+  steps?: readonly InstallmentStep[],
+): LoanTerms {
   return {
+    ...(steps && steps.length > 0 ? { installmentSteps: steps } : {}),
     principalSatang: principal,
     startDate: offer.startDate,
     termMonths: offer.termMonths,
@@ -134,8 +154,14 @@ export function evaluateOffer(offer: LoanOffer, opts: EvaluateOptions = {}): Off
   const financedCreditLife = offer.creditLife?.financed ? offer.creditLife.premiumSatang : 0n
   const effectivePrincipal = (offer.loanAmountSatang + feeTotals.financedSatang + financedCreditLife) as Satang
 
-  const installment = opts.equalPaymentSatang ?? offer.installmentQuotedSatang
-  const terms = toTerms(offer, effectivePrincipal, installment)
+  const equalPayment = opts.equalPaymentSatang
+  const installment = equalPayment ?? offer.installmentQuotedSatang
+  const terms = toTerms(
+    offer,
+    effectivePrincipal,
+    installment,
+    equalPayment === undefined ? offer.installmentSteps : undefined,
+  )
 
   const fireSchedule = offer.fireInsurance
     ? fireInsuranceSchedule(offer.fireInsurance, offer.startDate, offer.termMonths)

@@ -15,7 +15,7 @@ import type { Satang, Bps } from './money.js'
 import { buildSchedule } from './schedule.js'
 import type {
   LoanTerms, RateStep, ReferenceRate, LoanConvention, PaymentEvent,
-  DateRoll, RollCalendar, ScheduleRow,
+  DateRoll, RollCalendar, ScheduleRow, InstallmentStep,
 } from './types.js'
 
 export type ImportMode = 'quick' | 'full'
@@ -334,5 +334,34 @@ export function rateStepsFromYearlyRates(
     kind: 'fixed',
     fixedRateBps: floatingRateBps,
   })
+  return steps
+}
+
+/**
+ * แปลง "ค่างวดปีที่ N" ที่ผู้ใช้กรอก เป็น InstallmentStep
+ *
+ * ⚠️ ขอบเขตเดือนต้องตรงกับ rateStepsFromYearlyRates เป๊ะ
+ *    ใบเสนอของธนาคารเขียนเรตกับค่างวดคู่กันเป็นช่วงเดียวกันเสมอ
+ *    ถ้าสองชุดนี้เหลื่อมกัน จะมีงวดที่ใช้เรตของปีใหม่แต่ค่างวดของปีเก่า
+ *
+ * null ในอาร์เรย์ = ช่วงนั้นใช้ค่างวดตั้งต้น ไม่ต้องสร้างแถว
+ * คืน [] เมื่อไม่มีช่วงไหนกรอกเลย ซึ่งเป็นเคสปกติของสัญญาที่ค่างวดเท่ากันตลอด
+ */
+export function installmentStepsFromYearly(
+  yearlyPaySatang: readonly (Satang | null)[],
+  floatingPaySatang: Satang | null,
+): InstallmentStep[] {
+  const steps: InstallmentStep[] = []
+  for (const [i, pay] of yearlyPaySatang.entries()) {
+    if (pay === null) continue
+    steps.push({ fromMonth: i * 12 + 1, toMonth: (i + 1) * 12, amountSatang: pay })
+  }
+  if (floatingPaySatang !== null) {
+    steps.push({
+      fromMonth: yearlyPaySatang.length * 12 + 1,
+      toMonth: null,
+      amountSatang: floatingPaySatang,
+    })
+  }
   return steps
 }

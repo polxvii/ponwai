@@ -12,7 +12,9 @@ import type { ISODate } from './date.js'
 import { type Satang, type Bps, type Fixed, ZERO_FIXED } from './money.js'
 import { buildSchedule, pmt } from './schedule.js'
 import { findRateStep, resolveRate } from './rates.js'
-import type { LoanTerms, RateStep, ReferenceRate, LoanConvention, ScheduleRow } from './types.js'
+import type {
+  LoanTerms, RateStep, ReferenceRate, LoanConvention, ScheduleRow, InstallmentStep,
+} from './types.js'
 
 export type RefinanceOptionKind = 'stay' | 'retention' | 'refinance'
 
@@ -23,6 +25,12 @@ export type RefinanceScenario = {
   rateSteps: readonly RateStep[]
   /** ค่างวดที่จะใช้ต่อจากนี้ */
   installmentSatang: Satang
+  /**
+   * ค่างวดที่ต่างกันตามช่วงของใบเสนอ ว่าง = ใช้ installmentSatang ตลอด
+   * ⛔ ต้องถูกตัดทิ้งทุกครั้งที่เราไปกำหนดค่างวดเอง (ดู isFeasibleAt)
+   *    ไม่งั้นค่างวดที่เพิ่งคำนวณมาจะถูกแถวของช่วงทับ แล้วคำตอบไม่ตรงกับที่ถาม
+   */
+  installmentSteps?: readonly InstallmentStep[]
   /** จำนวนงวดที่เหลือตามสัญญาใหม่ — refinance มักยืดกลับเป็น 360 */
   termMonths: number
   /** ต้นทุนการย้าย รวมทุกอย่างแล้วสุทธิ (ดู movingCost) */
@@ -122,6 +130,9 @@ function termsFor(ctx: RefinanceContext, sc: RefinanceScenario): LoanTerms {
     referenceRates: ctx.referenceRates,
     conventions: ctx.conventions,
     installmentSatang: sc.installmentSatang,
+    ...(sc.installmentSteps && sc.installmentSteps.length > 0
+      ? { installmentSteps: sc.installmentSteps }
+      : {}),
     prepayMode: 'shorten_term',
   }
 }
@@ -266,7 +277,10 @@ export function prepayPenalty(
 
 /** ตารางที่ได้เป็นทางเลือกจริงไหม — ไม่มีงวดที่ดอกกินค่างวดหมด และปิดหนี้ทันเทอม */
 function isFeasibleAt(ctx: RefinanceContext, sc: RefinanceScenario, installment: Satang): boolean {
-  const r = buildSchedule(termsFor(ctx, { ...sc, installmentSatang: installment }))
+  // ⛔ ตัด installmentSteps ทิ้ง — คำถามคือ "จ่ายเท่านี้คงที่แล้วไหวไหม"
+  //    ถ้าปล่อยแถวของช่วงไว้ ค่างวดที่ส่งเข้ามาจะถูกทับ แล้วได้คำตอบของโจทย์อื่น
+  const { installmentSteps: _ignored, ...flat } = sc
+  const r = buildSchedule(termsFor(ctx, { ...flat, installmentSatang: installment }))
   return (
     r.paidOff &&
     r.rows.length <= sc.termMonths &&

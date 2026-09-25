@@ -7,7 +7,7 @@
 
 import { baht, bps, type Satang } from '@engine/money.js'
 import { isoDate, type ISODate } from '@engine/date.js'
-import { rateStepsFromYearlyRates } from '@engine/import.js'
+import { installmentStepsFromYearly, rateStepsFromYearlyRates } from '@engine/import.js'
 import { defaultImportConvention } from '@engine/import.js'
 import type { LoanOffer } from '@engine/compare.js'
 import type { OfferFee } from '@engine/fees.js'
@@ -66,6 +66,13 @@ export type OfferDraft = {
   /** เรตหลังพ้นโปร */
   floatingRate: number | ''
   installment: number | ''
+  /**
+   * ค่างวดของแต่ละช่วง เว้นว่าง = ใช้ค่างวดตามใบเสนอด้านบน
+   * ธนาคารมักคิดค่างวดช่วงโปรต่ำกว่าช่วงลอยตัว ถ้าบังคับค่าเดียว
+   * ต้นทุนจริงของใบเสนอจะเพี้ยนตั้งแต่งวดที่พ้นโปรเป็นต้นไป
+   */
+  promoInstallments: (number | '')[]
+  floatingInstallment: number | ''
   /** ค่าธรรมเนียมจ่ายสด */
   mortgageFeePct: number | ''
   mortgageFeeWaivedCap: number | ''
@@ -91,6 +98,8 @@ export function emptyDraft(id: string, bankCode: string = NO_BANK): OfferDraft {
     promoRates: ['', '', ''],
     floatingRate: '',
     installment: '',
+    promoInstallments: ['', '', ''],
+    floatingInstallment: '',
     mortgageFeePct: 1,
     mortgageFeeWaivedCap: '',
     stampDuty: true,
@@ -212,6 +221,10 @@ const num = (v: number | '' | undefined): number => (typeof v === 'number' ? v :
 /** baht() รับทศนิยมไม่เกิน 2 ตำแหน่ง — ช่องกรอกยอมให้พิมพ์ละเอียดกว่านั้นได้ จึงต้องปัดก่อน */
 const sat = (v: number | '' | undefined): Satang => baht(Math.round(num(v) * 100) / 100)
 
+/** เว้นว่าง = ไม่กำหนดค่างวดเฉพาะช่วง ให้ตกไปใช้ค่างวดตามใบเสนอ */
+const payOf = (v: number | '' | undefined): Satang | null =>
+  typeof v === 'number' && v > 0 ? baht(Math.round(v * 100) / 100) : null
+
 export function toLoanOffer(d: OfferDraft, common: CommonTerms): LoanOffer {
   const loanAmount = num(common.loanAmount)
 
@@ -280,6 +293,13 @@ export function toLoanOffer(d: OfferDraft, common: CommonTerms): LoanOffer {
     referenceRates: [],
     conventions: [defaultImportConvention(startDate)],
     installmentQuotedSatang: sat(d.installment),
+    // ส่งเฉพาะช่วงที่มีเรตจริง ให้ยาวตรงกับ promo เสมอ ไม่งั้นขอบเขตเดือนเหลื่อมกัน
+    installmentSteps: installmentStepsFromYearly(
+      d.promoRates
+        .map((r, i) => (typeof r === 'number' ? payOf(d.promoInstallments[i]) : null))
+        .filter((_, i) => typeof d.promoRates[i] === 'number'),
+      payOf(d.floatingInstallment),
+    ),
     fees,
     ...(num(d.firePremium) > 0
       ? {

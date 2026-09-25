@@ -10,7 +10,9 @@ import { compareRefinanceOptions, recommend, type RefinanceOutcome } from '@engi
 import type { Satang } from '@engine/money.js'
 import { isoDate } from '@engine/date.js'
 import { Field, NumberField, SelectField, TextField, Toggle, DateField } from '@/components/Field'
+import { InstallmentBands } from '@/components/InstallmentBands'
 import { useLocalState } from '@/lib/persist'
+import { EMPTY_DRAFTS, offerLabel, reviveDrafts, type OfferDraft } from '../compare/model'
 import { ResetButton } from '@/components/ResetButton'
 import { todayISO } from '../track/model'
 import { baht, bahtRounded, formatDuration, formatThaiDate } from '@/lib/format'
@@ -19,7 +21,7 @@ import { InterestCurveChart } from './InterestCurveChart'
 import { useAuth } from '@/lib/auth'
 import { getLoanFull, listLoans, type LoanListItem } from '@/lib/db'
 import {
-  currentFromLoan, emptyCurrent, EMPTY_RETENTION, EMPTY_REFI,
+  currentFromLoan, emptyCurrent, EMPTY_RETENTION, EMPTY_REFI, refiFromOffer,
   buildScenarios, contextOf, penaltyOf, refiMissing, refiMovingCost, refiReady,
   refiWarnings, retentionUsable,
   reviveCurrent, reviveRetention, reviveRefi,
@@ -97,7 +99,11 @@ export function RefinancePage() {
             penalty={penalty}
             onPull={(p) => setCurrent({ ...current, ...p })}
           />
-          <RetentionForm value={retention} onChange={(p) => setRetention({ ...retention, ...p })} />
+          <RetentionForm
+            value={retention}
+            onChange={(p) => setRetention({ ...retention, ...p })}
+            currentInstallment={current.installment}
+          />
           <RefiForm value={refi} onChange={(p) => setRefi({ ...refi, ...p })} movingCost={moving} />
         </div>
 
@@ -500,9 +506,12 @@ function CurrentLoanForm({
 function RetentionForm({
   value: r,
   onChange,
+  currentInstallment,
 }: {
   value: RetentionDraft
   onChange: (p: Partial<RetentionDraft>) => void
+  /** retention ไม่ได้เสนอค่างวดใหม่ ค่าตั้งต้นจึงเป็นค่างวดที่ผ่อนอยู่ */
+  currentInstallment: number | ''
 }) {
   const setRate = (i: number, v: number | '') => {
     const next = [...r.promoRates]
@@ -536,6 +545,14 @@ function RetentionForm({
             </Field>
           </div>
 
+          <InstallmentBands
+            promoRates={r.promoRates}
+            promoInstallments={r.promoInstallments}
+            floatingInstallment={r.floatingInstallment}
+            fallback={currentInstallment}
+            onChange={onChange}
+          />
+
           {/* ต้องบอก ไม่งั้นผู้ใช้เปิดสวิตช์ไว้แล้วงงว่าทำไมตารางมีแค่ 2 ทาง */}
           {!retentionUsable(r) && (
             <p className="mt-3 text-meta text-[var(--color-ink-3)]">
@@ -545,6 +562,56 @@ function RetentionForm({
         </>
       )}
     </section>
+  )
+}
+
+/**
+ * ดึงใบเสนอที่กรอกไว้ในหน้าเปรียบเทียบมาใช้
+ *
+ * ⚠️ อ่านจาก storage คีย์เดียวกับหน้าเปรียบเทียบ ไม่ทำท่อใหม่
+ *    หน้าเปรียบเทียบยังเป็นเจ้าของข้อมูล หน้านี้แค่คัดลอกค่าออกมาตอนกดปุ่ม
+ * ⚠️ ใบที่ยังไม่ได้กรอกเรตเลยไม่ต้องขึ้นในรายการ เลือกไปก็ได้ใบเปล่า
+ */
+function PullFromCompare({ onPull }: { onPull: (p: Partial<RefiDraft>) => void }) {
+  const [drafts] = useLocalState<OfferDraft[]>('compare:offers', EMPTY_DRAFTS, reviveDrafts)
+  const [picked, setPicked] = useState('')
+  const [pulledFrom, setPulledFrom] = useState<string | null>(null)
+
+  const usable = drafts.filter(
+    (d) => d.promoRates.some((x) => typeof x === 'number') || typeof d.floatingRate === 'number',
+  )
+  if (usable.length === 0) return null
+
+  const target = picked === '' ? usable[0] : (usable.find((d) => d.id === picked) ?? usable[0])
+
+  return (
+    <div className="mb-4 rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper)] p-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="min-w-[160px] flex-1">
+          <Field label="ดึงจากใบเสนอในหน้าเปรียบเทียบ">
+            <SelectField
+              value={target?.id ?? ''}
+              onChange={setPicked}
+              options={usable.map((d) => ({ value: d.id, label: offerLabel(d) }))}
+            />
+          </Field>
+        </div>
+        <button
+          onClick={() => {
+            if (!target) return
+            onPull(refiFromOffer(target))
+            setPulledFrom(offerLabel(target))
+          }}
+          className="tap shrink-0 rounded-md border border-[var(--color-interest)] px-3 py-2 text-meta text-[var(--color-interest)]"
+        >
+          ใช้ข้อมูลนี้
+        </button>
+      </div>
+      <p className="mt-2 text-micro text-[var(--color-ink-3)]">
+        {pulledFrom === null ? 'เติมเรต ค่างวด และค่าธรรมเนียมให้' : `เติมจาก ${pulledFrom} แล้ว`} —
+        ไม่แตะเทอมใหม่กับ lock-in ที่ตั้งไว้ เพราะเป็นตัวชี้ขาดเรื่องกับดักยืดเทอม
+      </p>
+    </div>
   )
 }
 
@@ -565,6 +632,8 @@ function RefiForm({
 
   return (
     <section className="rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4">
+      <PullFromCompare onPull={onChange} />
+
       <Field label="ย้ายไปธนาคาร">
         <SelectField
           value={r.bankCode}
@@ -620,6 +689,14 @@ function RefiForm({
           />
         </Field>
       </div>
+
+      <InstallmentBands
+        promoRates={r.promoRates}
+        promoInstallments={r.promoInstallments}
+        floatingInstallment={r.floatingInstallment}
+        fallback={r.installment}
+        onChange={onChange}
+      />
 
       <details className="mt-3" open>
         <summary className="tap cursor-pointer text-meta text-[var(--color-ink-2)]">
