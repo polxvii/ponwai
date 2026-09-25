@@ -19,7 +19,7 @@ import { SplitBar } from '@/components/SplitBar'
 import { Field, NumberField, SelectField, TextField, DateField } from '@/components/Field'
 import { baht, bahtRounded, formatDuration, formatThaiDate, pct } from '@/lib/format'
 import { isoDate } from '@engine/date.js'
-import { interestUpTo, settledPeriods } from '@/lib/progress'
+import { interestUpTo, prepayOfRow, settledPeriods } from '@/lib/progress'
 import {
   getMarginalTaxRateBps, getPlan, savePlan,
   setMarginalTaxRateBps, toLoanTerms, toPaymentEvents,
@@ -135,10 +135,9 @@ export function PrepayPage({
       const scheduled = toFixed(
         findInstallment(terms.installmentSteps, r.index, terms.installmentSatang),
       )
-      // paymentFixed รวม prepay ของงวดนั้นไว้แล้ว จึงหักค่างวดทีเดียวได้ทั้งสองทาง
-      // งวดที่ไม่ได้บันทึกค่างวดไว้ ยังต้องจับ "โปะบางส่วน" ที่บันทึกลอย ๆ ให้เจอ
-      // ไม่งั้นเดือนที่โปะไป 350,000 จะโชว์ "—" ชวนให้วางแผนโปะทับซ้ำ
-      const extra = r.flags.includes('actual_payment') ? r.paymentFixed - scheduled : r.prepayFixed
+      // สูตรเดียวกับคอลัมน์ "โปะ" ในตารางผ่อน — ต้องใช้ตัวเดียวกันเสมอ
+      // ไม่งั้นปฏิทินกับตารางจะบอกยอดโปะของเดือนเดียวกันไม่ตรงกัน
+      const extra = prepayOfRow(r, scheduled)
       if (extra > 0n) out.set(`${yearOf(r.date)}-${monthOf(r.date)}`, Number(extra / FIXED_SCALE) / 100)
     }
     return out

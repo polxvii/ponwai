@@ -916,6 +916,42 @@ export async function applyDateRule(
   if (res.error) throw new Error(translateDbError(res.error))
 }
 
+/**
+ * แก้วันตัดของงวดเดียว — null = คืนค่าตามกฎ
+ *
+ * ⚠️ กฎอัตโนมัติไม่มีวันครอบคลุมครบ ธนาคารบางแห่งไม่เลื่อนวันตัดเวลาตรงเสาร์-อาทิตย์
+ *    บางงวดถูกเลื่อนเพราะวันหยุดพิเศษที่ประกาศกะทันหัน
+ *    วันตัดที่ต่างไปวันเดียวเปลี่ยนจำนวนวันคิดดอกของงวดนั้นทั้งงวด
+ *    ต้องแก้รายงวดได้ ไม่ใช่บังคับให้กฎถูกทุกกรณี
+ *
+ * ⛔ ต้องตรวจว่าวันใหม่ยังอยู่หลังงวดก่อนหน้าเสมอ (validateOverrides)
+ *    ถ้าถอยไปก่อนงวดก่อน ช่วงคิดดอกจะติดลบ แล้ว buildSchedule จะ throw
+ *    ผู้ใช้จะเห็นแค่หน้าขาวโดยไม่รู้ว่าเกิดจากวันที่ที่เพิ่งกรอก
+ */
+export async function setScheduleOverride(
+  loanId: string,
+  periodIndex: number,
+  dueDate: ISODate | null,
+): Promise<void> {
+  const res =
+    dueDate === null
+      ? await supabase
+          .from('loan_schedule_overrides')
+          .delete()
+          .eq('loan_id', loanId)
+          .eq('period_index', periodIndex)
+      : await supabase.from('loan_schedule_overrides').upsert(
+          {
+            loan_id: loanId,
+            period_index: periodIndex,
+            due_date: dueDate,
+            reason: 'user_correction',
+          },
+          { onConflict: 'loan_id,period_index' },
+        )
+  if (res.error) throw new Error(translateDbError(res.error))
+}
+
 // ---------- วันหยุดธนาคาร ----------
 
 export type BankHoliday = {

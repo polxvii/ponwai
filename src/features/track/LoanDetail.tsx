@@ -11,21 +11,21 @@ import { buildSchedule } from '@engine/schedule.js'
 import { groupSchedule, type GroupAxis } from '@engine/grouping.js'
 import { findInstallment } from '@engine/rates.js'
 import { addDays, daysBetween, type ISODate } from '@engine/date.js'
-import type { Fixed, Satang } from '@engine/money.js'
+import { toFixed, type Fixed, type Satang } from '@engine/money.js'
 import type { PaymentEvent, PaymentKind, ScheduleRow } from '@engine/types.js'
 import { Field, NumberField, SelectField, TextField, DateField } from '@/components/Field'
 import { SplitBar } from '@/components/SplitBar'
 import { baht, bahtFixed, bahtRounded, formatDuration, formatMonthSpan, formatThaiDate, pct } from '@/lib/format'
 import { downloadCsv, paymentsCsv, reportName, scheduleCsv, yearSummaryCsv } from '@/lib/export'
 import {
-  addPayment, getLoanFull, getPlan, removePayment, toLoanTerms,
+  addPayment, getLoanFull, getPlan, removePayment, setScheduleOverride, toLoanTerms,
   toPaymentEvents, updatePayment,
   type LoanFull, type LoanListItem, type StoredPayment,
 } from '@/lib/db'
 import type { PrepayPlan } from '@engine/prepay.js'
 import { isoDate } from '@engine/date.js'
 import { todayISO } from './model'
-import { balanceOn, settledPeriods } from '@/lib/progress'
+import { balanceOn, prepayOfRow, settledPeriods } from '@/lib/progress'
 
 const FIXED = 1_000_000_000_000n
 
@@ -324,7 +324,17 @@ export function LoanDetail({
             &quot;วางแผนโปะ&quot; ด้านบน
           </p>
         )}
-        <ScheduleTable rows={rows} events={events} today={today} />
+        <ScheduleTable
+          rows={rows}
+          events={events}
+          today={today}
+          loanId={item.loanId}
+          overrides={full.scheduleOverrides}
+          scheduledOf={(period) =>
+            toFixed(findInstallment(terms.installmentSteps, period, terms.installmentSatang))
+          }
+          onChanged={() => setReloadKey((k) => k + 1)}
+        />
       </section>
     </Wrapper>
   )
@@ -645,14 +655,48 @@ function ScheduleTable({
   rows,
   events,
   today,
+  loanId,
+  overrides,
+  scheduledOf,
+  onChanged,
 }: {
   rows: readonly ScheduleRow[]
   events: readonly PaymentEvent[]
   today: ISODate
+  loanId: string
+  overrides: Readonly<Record<number, ISODate>>
+  /** ค่างวดตามสัญญาของงวดนั้น ใช้แยกว่าส่วนไหนของยอดที่จ่ายคือเงินโปะ */
+  scheduledOf: (period: number) => Fixed
+  onChanged: () => void
 }) {
+  /** งวดที่กำลังแก้วันตัด — null = ไม่ได้แก้อะไรอยู่ */
+  const [editDate, setEditDate] = useState<{ period: number; value: ISODate } | null>(null)
+  const [dateBusy, setDateBusy] = useState(false)
+  const [dateError, setDateError] = useState<string | null>(null)
+
+  async function saveDate(period: number, value: ISODate | null) {
+    // ⛔ ต้องอยู่หลังวันตัดงวดก่อนหน้า ไม่งั้นช่วงคิดดอกติดลบแล้ว engine จะ throw
+    const prev = rows.find((r) => r.index === period - 1)
+    if (value !== null && prev && value <= prev.date) {
+      setDateError(`ต้องเป็นวันหลัง ${formatThaiDate(prev.date)} ซึ่งเป็นวันตัดงวดก่อนหน้า`)
+      return
+    }
+    setDateBusy(true)
+    setDateError(null)
+    try {
+      await setScheduleOverride(loanId, period, value)
+      setEditDate(null)
+      onChanged()
+    } catch (e) {
+      setDateError((e as Error).message)
+    } finally {
+      setDateBusy(false)
+    }
+  }
   /* คอลัมน์โปะโผล่เฉพาะตอนมีของให้โชว์ — สัญญาที่ไม่เคยโปะไม่ต้องแบกคอลัมน์ว่าง
      บนจอ 380px ทุกคอลัมน์ที่เพิ่มคือการดันคอลัมน์อื่นออกนอกจอ */
-  const showPrepay = rows.some((r) => r.prepayFixed > 0n)
+  const prepayAt = (r: ScheduleRow) => prepayOfRow(r, scheduledOf(r.index))
+  const showPrepay = rows.some((r) => prepayAt(r) > 0n)
   const [showAll, setShowAll] = useState(false)
   // ใช้เกณฑ์เดียวกับการ์ดด้านบน ไม่งั้นแถวที่ไฮไลต์กับยอดคงเหลือชี้คนละงวด
   const currentIndex = settledPeriods(rows, events, today)
@@ -663,6 +707,53 @@ function ScheduleTable({
 
   return (
     <>
+      {editDate !== null && (
+        <div className="mb-3 rounded-lg border border-[var(--color-interest)] bg-[var(--color-paper-raised)] p-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-[180px]">
+              <Field
+                label={`วันตัดงวดที่ ${editDate.period}`}
+                hint={formatThaiDate(editDate.value, 'long')}
+              >
+                <DateField
+                  value={editDate.value}
+                  onChange={(v) => setEditDate({ ...editDate, value: isoDate(v) })}
+                />
+              </Field>
+            </div>
+            <button
+              onClick={() => void saveDate(editDate.period, editDate.value)}
+              disabled={dateBusy}
+              className="tap rounded-md bg-[var(--color-interest)] px-4 py-2 text-meta text-[var(--color-panel-ink)] disabled:opacity-50"
+            >
+              {dateBusy ? 'กำลังบันทึก…' : 'ใช้วันนี้'}
+            </button>
+            {overrides[editDate.period] !== undefined && (
+              <button
+                onClick={() => void saveDate(editDate.period, null)}
+                disabled={dateBusy}
+                className="tap text-meta text-[var(--color-ink-2)] hover:underline disabled:opacity-50"
+              >
+                คืนค่าตามกฎ
+              </button>
+            )}
+            <button
+              onClick={() => setEditDate(null)}
+              className="tap text-meta text-[var(--color-ink-3)] hover:underline"
+            >
+              ยกเลิก
+            </button>
+          </div>
+          <p className="mt-2 text-micro text-[var(--color-ink-3)]">
+            เปลี่ยนวันตัดจะเปลี่ยนจำนวนวันคิดดอกของงวดนี้และงวดถัดไป —
+            ใช้เมื่อใบแจ้งยอดตัดคนละวันกับที่ระบบคำนวณ
+          </p>
+          {dateError && (
+            <p className="mt-2 text-meta text-[var(--color-warn)]">{dateError}</p>
+          )}
+        </div>
+      )}
+
       <div className="overflow-x-auto">
         <table className="w-full min-w-[900px] border-collapse text-meta">
           {/* เรียงคอลัมน์ตามที่คนติดตามสินเชื่อใน Excel คุ้นเคย
@@ -699,14 +790,33 @@ function ScheduleTable({
                 >
                   <TdRight>{r.index}</TdRight>
                   <td className="py-2 pr-4 whitespace-nowrap">
-                    {formatThaiDate(r.date, 'monthYear')}
-                    {r.date !== r.nominalDate && (
+                    {/* แก้วันตัดได้ทีละงวด — กฎอัตโนมัติไม่มีวันครอบคลุมทุกธนาคาร */}
+                    <button
+                      onClick={() => {
+                        setDateError(null)
+                        setEditDate({ period: r.index, value: r.date })
+                      }}
+                      title={`วันตัดจริง ${formatThaiDate(r.date)} — กดเพื่อแก้`}
+                      className="tap hover:underline"
+                    >
+                      {formatThaiDate(r.date, 'monthYear')}
+                    </button>
+                    {overrides[r.index] !== undefined ? (
                       <span
-                        className="ml-1 text-[var(--color-ink-3)]"
-                        title={`ตัดจริง ${formatThaiDate(r.date)} ตามกฎคือ ${formatThaiDate(r.nominalDate)}`}
+                        className="ml-1 text-[var(--color-interest)]"
+                        title={`แก้เองเป็น ${formatThaiDate(r.date)} ตามกฎคือ ${formatThaiDate(r.nominalDate)}`}
                       >
-                        *
+                        ✎
                       </span>
+                    ) : (
+                      r.date !== r.nominalDate && (
+                        <span
+                          className="ml-1 text-[var(--color-ink-3)]"
+                          title={`ตัดจริง ${formatThaiDate(r.date)} ตามกฎคือ ${formatThaiDate(r.nominalDate)}`}
+                        >
+                          *
+                        </span>
+                      )
                     )}
                   </td>
                   <TdRight>{pct(r.effectiveRateBps)}</TdRight>
@@ -714,9 +824,9 @@ function ScheduleTable({
                   <TdRight>{bahtFixed(r.interestFixed)}</TdRight>
                   {showPrepay && (
                     <TdRight>
-                      {r.prepayFixed > 0n ? (
+                      {prepayAt(r) > 0n ? (
                         <span className="text-[var(--color-principal-dark)]">
-                          {bahtFixed(r.prepayFixed)}
+                          {bahtFixed(prepayAt(r))}
                         </span>
                       ) : (
                         <span className="text-[var(--color-ink-3)]">—</span>

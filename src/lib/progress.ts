@@ -72,3 +72,22 @@ export function interestUpTo(rows: readonly ScheduleRow[], n: number): Fixed {
     .slice(0, Math.max(0, Math.min(n, rows.length)))
     .reduce((a, r) => (a + r.interestFixed) as Fixed, 0n as Fixed)
 }
+
+/**
+ * ส่วนที่เป็น "เงินโปะ" ของงวดนั้น
+ *
+ * ⚠️ ไม่ใช่ r.prepayFixed เฉย ๆ — ตัวนั้นนับเฉพาะรายการ "โปะบางส่วน" กับยอดจากแผน
+ *    คนที่โอนรวมมาก้อนเดียว (ค่างวด 37,000 แต่โอน 80,000) ส่วนเกิน 43,000 ก็คือเงินโปะ
+ *    เครื่องตัดเงินต้นให้ถูกอยู่แล้ว แต่ถ้าคอลัมน์โปะโชว์ "—" ผู้ใช้จะนึกว่าไม่ได้โปะ
+ *
+ * ⚠️ paymentFixed รวม prepayFixed ไว้แล้ว จึงหักค่างวดทีเดียวได้ทั้งสองทาง
+ *    ห้ามบวก prepayFixed เข้าไปอีก จะนับซ้ำ
+ *
+ * ⛔ งวดสุดท้ายจ่ายแค่เท่าที่เหลือ ซึ่งมักน้อยกว่าค่างวด ผลลบต้องกลายเป็น 0
+ */
+export function prepayOfRow(row: ScheduleRow, scheduledFixed: Fixed): Fixed {
+  const raw = row.flags.includes('actual_payment')
+    ? row.paymentFixed - scheduledFixed
+    : row.prepayFixed
+  return (raw > 0n ? raw : 0n) as Fixed
+}
