@@ -8,7 +8,7 @@
  * ⛔ สองมุมมองต้องแสดงคนละอย่าง ถ้าแค่จัดเรียงข้อมูลชุดเดิมใหม่ ไม่ต้องมีสองมุมมอง
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildSchedule } from '@engine/schedule.js'
 import { findInstallment } from '@engine/rates.js'
 import { evaluatePrepayPlan } from '@engine/prepay-roi.js'
@@ -33,6 +33,9 @@ import {
 } from './model'
 
 export type OtherLoan = { loanId: string; rows: readonly ScheduleRow[] }
+
+/** JSON.stringify โยนทิ้งเมื่อเจอ bigint — แผนเก็บยอดเป็น Satang ซึ่งเป็น bigint */
+const bigintText = (_k: string, v: unknown) => (typeof v === 'bigint' ? v.toString() : v)
 
 export function PrepayPage({
   item,
@@ -66,6 +69,8 @@ export function PrepayPage({
   /** null = ยังโหลดไม่เสร็จ ห้ามให้ผู้ใช้แก้ก่อน ไม่งั้นแผนที่โหลดมาทับสิ่งที่เพิ่งพิมพ์ */
   const [planLoaded, setPlanLoaded] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
+  /** แผนที่เขียนลง DB ไปแล้ว ใช้กันการบันทึกซ้ำโดยไม่มีอะไรเปลี่ยน */
+  const lastSaved = useRef<string | null>(null)
 
   // แผนของสัญญานี้มีอันเดียว เปิดหน้ามาก็เอาอันนั้นมาแก้ต่อเลย ไม่ต้องเลือก
   useEffect(() => {
@@ -73,7 +78,10 @@ export function PrepayPage({
     getPlan(item.loanId)
       .then((p) => {
         if (!alive) return
-        if (p) setDraft(fromPlan(p))
+        if (p) {
+          setDraft(fromPlan(p))
+          lastSaved.current = JSON.stringify(p, bigintText)
+        }
         setPlanLoaded(true)
       })
       .catch((e: Error) => {
@@ -280,18 +288,38 @@ export function PrepayPage({
     if (selected.length === 0) setManual('')
   }, [selected.length])
 
-  async function save() {
+  const save = useCallback(async () => {
     setBusy(true)
     setError(null)
     try {
-      await savePlan(item.loanId, toPlan(draft))
+      const plan = toPlan(draft)
+      await savePlan(item.loanId, plan)
+      lastSaved.current = JSON.stringify(plan, bigintText)
       setSavedAt(new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }))
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setBusy(false)
     }
-  }
+  }, [draft, item.loanId])
+
+  /**
+   * บันทึกอัตโนมัติ
+   *
+   * แผนมีอันเดียวต่อสัญญา การให้กดบันทึกเองจึงไม่ได้ให้ทางเลือกอะไร
+   * มีแต่ทำให้คนกรอกยอดเสร็จแล้วปิดหน้าไป โดยที่ตารางผ่อนไม่เคยเห็นแผนนั้น
+   *
+   * ⛔ ห้ามยิงก่อน planLoaded — draft ตอนนั้นยังว่าง จะเขียนทับแผนจริงที่กำลังโหลดมา
+   * ⚠️ เทียบกับที่บันทึกไว้ล่าสุดก่อนเสมอ ไม่งั้นแค่โหลดแผนมาก็ยิงเขียนกลับทันทีหนึ่งรอบ
+   *    และ savePlan ลบ scenario เก่าทิ้งทุกครั้ง การเขียนซ้ำ ๆ คือการลบ-สร้างซ้ำ ๆ ด้วย
+   */
+  useEffect(() => {
+    if (!planLoaded) return
+    const next = JSON.stringify(toPlan(draft), bigintText)
+    if (next === lastSaved.current) return
+    const t = setTimeout(() => void save(), 1200)
+    return () => clearTimeout(t)
+  }, [draft, planLoaded, save])
 
   async function saveTaxRate(v: number | '') {
     const bpsValue = typeof v === 'number' && v > 0 ? Math.round(v * 100) : null
@@ -649,31 +677,30 @@ export function PrepayPage({
 
       <LumpSection draft={draft} onChange={setDraft} today={today} />
 
-      {/* ---------- บันทึกแผน ---------- */}
+      {/* ---------- สถานะการบันทึก ---------- */}
       <section className="mt-8">
         <h2 className="text-row">แผนโปะของสัญญานี้</h2>
         <p className="mt-1 text-meta text-[var(--color-ink-2)]">
-          มีแผนเดียวต่อสัญญา บันทึกแล้วตารางผ่อนกับสรุปรายปีในหน้าสัญญาจะคิดตามแผนนี้ให้
+          มีแผนเดียวต่อสัญญา บันทึกให้อัตโนมัติ
+          ตารางผ่อนกับสรุปรายปีในหน้าสัญญาจะคิดรวมแผนนี้ให้
         </p>
 
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => void save()}
-            disabled={busy || !planLoaded}
-            className="tap rounded-md bg-[var(--color-interest)] px-4 py-2 text-[var(--color-panel-ink)] disabled:opacity-50"
-          >
-            {busy ? 'กำลังบันทึก…' : 'บันทึกแผน'}
-          </button>
-          {savedAt !== null && !busy && (
-            <span className="text-meta text-[var(--color-ok)]">บันทึกแล้ว {savedAt} น.</span>
+        <p className="mt-2 text-meta">
+          {busy ? (
+            <span className="text-[var(--color-ink-2)]">กำลังบันทึก…</span>
+          ) : error !== null ? (
+            <span className="text-[var(--color-warn)]">
+              บันทึกไม่สำเร็จ — {error}{' '}
+              <button onClick={() => void save()} className="tap underline">
+                ลองอีกครั้ง
+              </button>
+            </span>
+          ) : savedAt !== null ? (
+            <span className="text-[var(--color-ok)]">บันทึกแล้ว {savedAt} น.</span>
+          ) : (
+            <span className="text-[var(--color-ink-3)]">แก้ยอดแล้วระบบบันทึกให้เอง</span>
           )}
-        </div>
-
-        {error && (
-          <p className="mt-3 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
-            {error}
-          </p>
-        )}
+        </p>
       </section>
     </div>
   )
@@ -778,6 +805,9 @@ function CalendarView({
         const done = doneAt(m)
         const isSelected = done === undefined && selected.includes(m)
         const isAnchor = done === undefined && anchor === m
+        // ยอดที่ต้องโอนจริงของเดือนนั้น = ค่างวด + โปะ ตัวเลขที่ผู้ใช้เอาไปเทียบกับเงินในบัญชี
+        const due = dueAt(m)
+        const total = due === undefined ? undefined : due + v
         return (
           <div
             key={m}
@@ -796,9 +826,9 @@ function CalendarView({
                 <span className="ml-1 text-[var(--color-principal-dark)]">จ่ายแล้ว</span>
               )}
               {/* ค่างวดที่ต้องจ่ายอยู่แล้วของเดือนนั้น — ฐานที่ยอดโปะจะไปบวกเพิ่ม */}
-              {dueAt(m) !== undefined && (
+              {due !== undefined && (
                 <span className="block text-micro text-[var(--color-ink-3)]">
-                  ค่างวด {Math.round(dueAt(m)!).toLocaleString('en-US')}
+                  ค่างวด {Math.round(due).toLocaleString('en-US')}
                 </span>
               )}
             </button>
@@ -839,6 +869,13 @@ function CalendarView({
                   v.toLocaleString('en-US')
                 )}
               </button>
+            )}
+
+            {/* ยอดที่ต้องโอนจริงเดือนนั้น = ค่างวด + โปะ — เลขที่เอาไปเทียบกับเงินในบัญชีได้ตรง ๆ */}
+            {total !== undefined && total > 0 && (
+              <span className="mt-1 block text-right text-micro text-[var(--color-ink-3)]">
+                รวม {Math.round(total).toLocaleString('en-US')}
+              </span>
             )}
 
             <div className="mt-2 h-1.5 overflow-hidden rounded-sm bg-[var(--color-rule)]">

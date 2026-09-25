@@ -29,6 +29,9 @@ export function makeTerms(o: TermsOverrides = {}): LoanTerms {
   return {
     principalSatang,
     startDate,
+    // ⚠️ optional บน LoanTerms — ต้องส่งต่อแบบมีเงื่อนไข ไม่งั้น exactOptionalPropertyTypes ฟ้อง
+    //    และถ้าลืมส่ง เทสต์จะเงียบ ๆ ใช้กฎเดิมโดยไม่มีใครรู้
+    ...(o.firstDueDate !== undefined ? { firstDueDate: o.firstDueDate } : {}),
     termMonths: o.termMonths ?? 360,
     dueDayOfMonth: o.dueDayOfMonth ?? 1,
     dateRoll: o.dateRoll ?? 'none',

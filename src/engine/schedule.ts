@@ -35,6 +35,7 @@ export function buildSchedule(
 ): ScheduleResult {
   const cfg: DateRuleConfig = {
     startDate: terms.startDate,
+    ...(terms.firstDueDate !== undefined ? { firstDueDate: terms.firstDueDate } : {}),
     dueDayOfMonth: terms.dueDayOfMonth,
     dateRoll: terms.dateRoll,
     rollCalendar: terms.rollCalendar,

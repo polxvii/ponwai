@@ -564,6 +564,8 @@ export function toLoanTerms(f: LoanFull): LoanTerms {
     principalSatang: sat(f.loan.disbursed_amount_satang),
     // ⛔ ไม่ใช่ contract_date — engine เริ่มคิดดอกจากวันเบิกเงินกู้ (ข้อ 1.4.2)
     startDate: isoDate(f.loan.first_accrual_date),
+    // ⚠️ เก็บไว้ตั้งแต่แรกแต่ไม่เคยถูกส่งเข้า engine ตารางจึงเดาวันตัดงวดแรกเอง (TV-0)
+    firstDueDate: isoDate(f.loan.first_due_date),
     termMonths: f.loan.term_months,
     dueDayOfMonth: f.loan.due_day_of_month,
     dateRoll: f.loan.date_roll,

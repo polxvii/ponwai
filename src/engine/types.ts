@@ -45,6 +45,11 @@ export type LoanTerms = {
   principalSatang: Satang
   /** วันเริ่มคิดดอกเบี้ยงวดแรก = first_accrual_date ผู้ใช้แก้ได้ (ข้อ 1.4.2) */
   startDate: ISODate
+  /**
+   * วันตัดงวดแรกตามที่ธนาคารกำหนด — ไม่ระบุ = นับจาก startDate ตามกฎเดิม
+   * ดูเหตุผลที่ต้องมีได้ที่ DateRuleConfig.firstDueDate
+   */
+  firstDueDate?: ISODate
   termMonths: number
   dueDayOfMonth: number
 

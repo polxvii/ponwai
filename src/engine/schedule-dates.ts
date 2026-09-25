@@ -16,6 +16,18 @@ import type { DateRoll, RollCalendar } from './types.js'
 
 export type DateRuleConfig = {
   startDate: ISODate
+  /**
+   * วันตัดงวดแรกตามที่ธนาคารกำหนดจริง
+   *
+   * ⚠️ จำเป็น ไม่ใช่ของแถม — งวดแรกของสัญญาไทยไม่ได้ห่างจากวันเบิกเงินกู้หนึ่งเดือนเสมอ
+   *    เบิกเงินวันที่ 29 พ.ค. วันตัดรอบคือวันที่ 5 ธนาคารมักไม่เรียกเก็บรอบ 5 มิ.ย.
+   *    เพราะเพิ่งเบิกได้ 7 วัน แล้วไปเริ่มที่ 5 ก.ค. เป็นงวดแรก 36 วันแทน
+   *    ถ้าเดาเอาจาก startDate + dueDayOfMonth จะได้งวดสั้น ๆ ที่ธนาคารไม่เคยออกบิล
+   *    ทั้งตารางเลื่อนไปหนึ่งงวดและไม่มีวันตรงกับใบแจ้งยอด (TV-0)
+   *
+   * ไม่ระบุ = ใช้กฎเดิม นับจาก startDate — โหมดเปรียบเทียบ/รีไฟแนนซ์ยังไม่มีวันนี้
+   */
+  firstDueDate?: ISODate
   dueDayOfMonth: number
   dateRoll: DateRoll
   rollCalendar: RollCalendar
@@ -55,8 +67,19 @@ export function rollDate(
   throw new Error(`หาวันทำการไม่เจอภายใน 30 วันจาก ${d} — ปฏิทินวันหยุดน่าจะผิด`)
 }
 
-/** วันตัดตามกฎ ยังไม่รวม override */
+/**
+ * วันตัดตามกฎ ยังไม่รวม override
+ *
+ * ⛔ anchor ต้องคงที่เสมอ ห้ามนับต่อจาก actual(n−1)
+ *    ไม่งั้นวันตัดจะไหลจากวันที่ 5 ไปถึงวันที่ 1 ภายใน 30 ปี (TV-32)
+ *    การใส่ firstDueDate เป็นการ "ย้าย anchor" ครั้งเดียว ไม่ใช่การนับต่อกันเป็นทอด ๆ
+ */
 export function nominalDueDate(cfg: DateRuleConfig, period: number): ISODate {
+  if (cfg.firstDueDate !== undefined) {
+    // งวดแรกใช้วันที่ธนาคารกำหนดตรง ๆ งวดถัดไปนับจากวันนั้นเป็น anchor ใหม่
+    if (period === 1) return cfg.firstDueDate
+    return addMonthsClamped(cfg.firstDueDate, period - 1, cfg.dueDayOfMonth)
+  }
   return addMonthsClamped(cfg.startDate, period, cfg.dueDayOfMonth)
 }
 
