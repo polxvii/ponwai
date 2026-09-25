@@ -7,6 +7,7 @@ import { formatDuration } from '@/lib/format'
 import { useLocalState } from '@/lib/persist'
 import { ResetButton } from '@/components/ResetButton'
 import { BankMark } from '@/components/BankMark'
+import { BankSelect } from '@/components/BankSelect'
 import { ResultsTable } from './ResultsTable'
 import { CostCurveChart, SensitivityBand } from './CostCurveChart'
 import {
@@ -128,7 +129,9 @@ export function ComparePage() {
         <ResetButton onReset={resetAll} />
       </header>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] lg:gap-10">
+      {/* ⚠️ ฝั่งกรอกต้องกว้างขึ้นตามจอ ตรึงที่ 380 ตลอดทำให้จอ 1440 เหลือที่ว่างเปล่า
+          ส่วนฝั่งผลลัพธ์ยังได้ที่เหลือทั้งหมดเพราะตารางเทียบกว้างกว่าฟอร์มเสมอ */}
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] lg:gap-10 xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)]">
         {/* ---------- ฝั่งกรอก ---------- */}
         {/* min-w-0 จำเป็น: grid item ตั้งต้นเป็น min-width:auto ลูกที่กว้างจะดันคอลัมน์จนหน้าเลื่อนได้ */}
         <div className="min-w-0 space-y-6">
@@ -291,11 +294,10 @@ function OfferForm({
       </div>
 
       <Field label="ธนาคาร">
-        <SelectField
+        <BankSelect
           value={draft.bankCode}
           onChange={(v) => onChange({ bankCode: v })}
           options={BANK_OPTIONS}
-          placeholder="เลือกธนาคาร"
         />
       </Field>
 

@@ -11,6 +11,7 @@ import type { Satang } from '@engine/money.js'
 import { isoDate } from '@engine/date.js'
 import { Field, NumberField, SelectField, TextField, Toggle, DateField } from '@/components/Field'
 import { InstallmentBands } from '@/components/InstallmentBands'
+import { BankSelect } from '@/components/BankSelect'
 import { useLocalState } from '@/lib/persist'
 import { EMPTY_DRAFTS, offerLabel, reviveDrafts, type OfferDraft } from '../compare/model'
 import { ResetButton } from '@/components/ResetButton'
@@ -635,11 +636,10 @@ function RefiForm({
       <PullFromCompare onPull={onChange} />
 
       <Field label="ย้ายไปธนาคาร">
-        <SelectField
+        <BankSelect
           value={r.bankCode}
           onChange={(v) => onChange({ bankCode: v })}
           options={BANK_OPTIONS}
-          placeholder="เลือกธนาคาร"
         />
       </Field>
 

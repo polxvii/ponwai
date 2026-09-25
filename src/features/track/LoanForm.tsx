@@ -12,6 +12,7 @@ import { formatThaiDate } from '@/lib/format'
 import { isoDate } from '@engine/date.js'
 import { createLoan, updateLoan } from '@/lib/db'
 import { BANK_OPTIONS, OTHER_BANK } from '../compare/model'
+import { BankSelect } from '@/components/BankSelect'
 import {
   DATE_ROLL_OPTIONS, DAY_COUNT_OPTIONS, ROLL_CALENDAR_OPTIONS, ROUNDING_OPTIONS,
   bandsCoverEveryPeriod, emptyLoanDraft, todayISO, toNewLoanInput, validateDraft,
@@ -90,7 +91,7 @@ export function LoanForm({
         </Field>
 
         <Field label="ธนาคาร">
-          <SelectField
+          <BankSelect
             value={d.bankCode}
             onChange={(v) => set({ bankCode: v })}
             options={BANK_OPTIONS}
