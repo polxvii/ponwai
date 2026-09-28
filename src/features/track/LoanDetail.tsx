@@ -908,10 +908,13 @@ function ScheduleTable({
                   </TdRight>
                   <TdRight>
                     {bahtFixed(r.balanceAfterFixed)}
+                    {/* ป้ายลงบรรทัดใหม่ใต้ตัวเลข แบบเดียวกับรายการโอนในคอลัมน์ยอดชำระ
+                        ต่อท้ายในบรรทัดเดียวกันจะดันตัวเลขให้ไม่ตรงแนวกับแถวอื่น
+                        ซึ่งทำให้กวาดตาอ่านยอดคงเหลือทั้งคอลัมน์ไม่ได้ */}
                     {otherFlags.length > 0 && (
-                      <span className="ml-2 text-micro text-[var(--color-ink-3)]">
+                      <div className="text-micro font-normal text-[var(--color-ink-3)]">
                         {otherFlags.map((f) => FLAG_LABELS[f] ?? f).join(' · ')}
-                      </span>
+                      </div>
                     )}
                   </TdRight>
                   {/* ช่วงคิดดอกคือ (วันตัดงวดก่อน, วันตัดงวดนี้] — วันตัดถูกคิดดอกด้วย (TV-50) */}
