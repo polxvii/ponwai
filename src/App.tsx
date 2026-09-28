@@ -58,9 +58,10 @@ function Shell() {
     <>
       {/*
         ⛔ ห้ามปล่อยให้แถบนี้ห่อบรรทัด
-           คำอธิบายใต้แท็บกินความกว้างเกินที่จอแคบมี แล้วข้อความตัดกลางคำ
+           คำอธิบายใต้แท็บกินความกว้างเกินที่จอแคบมี ถ้าห่อบรรทัดข้อความจะตัดกลางคำ
            เช่น "ก่อนเซ็น / สัญญา" ซึ่งอ่านยากกว่าไม่มีคำอธิบายเลย
-           จอแคบจึงซ่อนคำอธิบาย เหลือป้ายบรรทัดเดียว และเลื่อนแนวนอนได้ถ้ายังไม่พอ
+           ทางออกคือ whitespace-nowrap + overflow-x-auto ให้เลื่อนแนวนอนแทน
+           ⚠️ คำอธิบายต้องขึ้นทุกขนาดจอ [SOURCE: ผู้ใช้] เคยซ่อนที่จอแคบแล้วผู้ใช้หาไม่เจอ
       */}
       <nav className="border-b border-[var(--color-rule)]">
         <div className="mx-auto flex max-w-[1440px] items-stretch gap-1 px-4 sm:px-6 lg:px-8">
@@ -85,7 +86,7 @@ function Shell() {
                 <span className="block text-meta sm:text-row">
                   {t.label}
                 </span>
-                <span className="hidden text-micro text-[var(--color-ink-3)] sm:block">
+                <span className="block text-micro text-[var(--color-ink-3)]">
                   {t.hint}
                 </span>
               </button>
