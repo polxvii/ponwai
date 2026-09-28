@@ -20,6 +20,7 @@ import { SplitRibbon } from '@/components/SplitRibbon'
 import { SplitBar, CapMeter } from '@/components/SplitBar'
 import { Field, SelectField } from '@/components/Field'
 import { SwipeX } from '@/components/SwipeX'
+import { BankMark } from '@/components/BankMark'
 import { baht, bahtRounded, formatDuration, formatThaiDate } from '@/lib/format'
 import { toLoanTerms, toPaymentEvents, type LoanFull, type LoanListItem } from '@/lib/db'
 import { BalanceChart, TaxChart, YearBarsChart } from './charts'
@@ -188,6 +189,19 @@ export function DashboardPage({
 
       {/* ---------- hero บนแผงหมึกเข้ม (ข้อ 5.4) ---------- */}
       <section className="rounded-lg bg-[var(--color-panel)] p-5 text-[var(--color-panel-ink)] sm:p-6">
+        {/* ⚠️ ต้องบอกว่ายอดนี้เป็นของหลังไหน ธนาคารอะไร
+            แผงนี้เคยขึ้นแต่ตัวเลขล้วน คนมีสัญญาเดียวก็ยังต้องเดาว่าดูของอะไรอยู่
+            และตัวเลือก "กำลังดูหลัง" ด้านบนโผล่เฉพาะตอนมีหลายสัญญา */}
+        <div className="mb-4 flex items-center gap-3">
+          <BankMark code={selected.item.bankCode} name={selected.item.bankLabel} size={32} />
+          <div className="min-w-0">
+            <p className="truncate text-row">{selected.item.propertyName}</p>
+            <p className="truncate text-meta text-[var(--color-panel-ink-2)]">
+              {selected.item.bankLabel}
+            </p>
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-meta text-[var(--color-panel-ink-2)]">
             งวด {currentIndex} จาก {rows.length}
