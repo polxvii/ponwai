@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest'
 import { buildSchedule } from '@engine/schedule.js'
 import { groupSchedule } from '@engine/grouping.js'
 import { makeTerms, fixedStep } from '@engine/test-helpers.js'
-import { baht } from '@engine/money.js'
+import { baht, toFixed, type Fixed } from '@engine/money.js'
 import { isoDate } from '@engine/date.js'
 import { loanReportHtml, type ReportInput } from './report'
 import type { StoredPayment } from './db'
@@ -47,6 +47,7 @@ function report(over: Partial<ReportInput> = {}): string {
     rows: ROWS,
     groups: GROUPS,
     payments: [],
+    scheduledOf: () => toFixed(baht(20_000)),
     settled: 12,
     today: isoDate('2027-03-05'),
     ...over,
@@ -97,5 +98,31 @@ describe('TV-52 เนื้อหาของรายงาน', () => {
 
   it('บอกด้วยว่างวดไหนเป็นต้นไปเป็นประมาณการ ไม่ใช่ยอดจริง', () => {
     expect(report({ settled: 12 })).toContain('งวดที่ 13 เป็นต้นไปเป็นประมาณการ')
+  })
+})
+
+describe('TV-52 คอลัมน์โปะของงวดที่จ่ายจริง', () => {
+  // จ่าย 500,000 ในงวดที่ค่างวดตามสัญญา 20,000 = โปะไป 480,000
+  const rows = buildSchedule(TERMS, [
+    { date: isoDate('2026-04-05'), amountSatang: baht(500_000), kind: 'installment' },
+  ]).rows
+  const html = report({
+    rows,
+    groups: groupSchedule(rows, 'contract_year'),
+    settled: 1,
+  })
+  const firstRow = html.slice(html.lastIndexOf('<tbody>')).split('</tr>')[0] ?? ''
+
+  it('ต้องแสดงส่วนที่จ่ายเกินค่างวด ไม่ใช่ขีด', () => {
+    expect(firstRow).toContain('480,000.00')
+  })
+
+  /**
+   * ⛔ prepayFixed นับเฉพาะยอดจากแผนกับรายการ "โปะบางส่วน"
+   *    เงินที่โอนเกินค่างวดมาในรายการเดียวไม่ถูกนับ ต้องใช้ prepayOfRow เท่านั้น
+   */
+  it('ค่าดิบ prepayFixed ของงวดนั้นเป็น 0 — เทสต์นี้จึงจับบั๊กได้จริง', () => {
+    expect(rows[0]!.prepayFixed).toBe(0n as Fixed)
+    expect(rows[0]!.flags).toContain('actual_payment')
   })
 })

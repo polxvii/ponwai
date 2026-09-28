@@ -273,6 +273,8 @@ export function LoanDetail({
                 rows,
                 groups: groupSchedule(rows, axis),
                 payments: full.payments,
+                scheduledOf: (period) =>
+                  toFixed(findInstallment(terms.installmentSteps, period, terms.installmentSatang)),
                 settled: paidPeriods,
                 today,
               }),

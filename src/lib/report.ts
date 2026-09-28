@@ -18,6 +18,7 @@ import type { ScheduleRow } from '@engine/types.js'
 import type { YearGroup } from '@engine/grouping.js'
 import type { ISODate } from '@engine/date.js'
 import { formatThaiDate, formatAccrualRange } from './format'
+import { prepayOfRow } from './progress'
 import type { StoredPayment } from './db'
 
 const C = {
@@ -129,6 +130,14 @@ export type ReportInput = {
   rows: readonly ScheduleRow[]
   groups: readonly YearGroup[]
   payments: readonly StoredPayment[]
+  /**
+   * ค่างวดตามสัญญาของงวดนั้น — ใช้แยกว่าส่วนไหนของยอดที่จ่ายคือเงินโปะ
+   *
+   * ⛔ ห้ามอ่าน prepayFixed ตรง ๆ แทน มันนับเฉพาะยอดจากแผนกับรายการ "โปะบางส่วน"
+   *    เงินที่โอนเกินค่างวดมาในรายการเดียวจะไม่ถูกนับ แล้วคอลัมน์โปะขึ้น "—"
+   *    ทั้งที่งวดนั้นโปะไปหลายล้าน (บั๊กเดิมของตารางบนแอพ แก้ไปแล้วที่ prepayOfRow)
+   */
+  scheduledOf: (period: number) => Fixed
   /** จำนวนงวดที่ถือว่าจ่ายจริงไปแล้ว ใช้แยกอดีตออกจากประมาณการ */
   settled: number
   today: ISODate
@@ -169,18 +178,21 @@ export function loanReportHtml(x: ReportInput): string {
     b2(g.closingBalanceFixed),
   ])
 
-  const schedRows = x.rows.map((r) => [
-    String(r.index),
-    formatThaiDate(r.date, 'short'),
-    `${(r.effectiveRateBps / 100).toFixed(2)}%`,
-    b2(r.principalFixed),
-    b2(r.interestFixed),
-    r.prepayFixed > 0n ? b2(r.prepayFixed) : '—',
-    b2(r.paymentFixed),
-    b2(r.balanceAfterFixed),
-    formatAccrualRange(r.accrualFrom, r.date),
-    String(r.accrualDays),
-  ])
+  const schedRows = x.rows.map((r) => {
+    const prepay = prepayOfRow(r, x.scheduledOf(r.index))
+    return [
+      String(r.index),
+      formatThaiDate(r.date, 'short'),
+      `${(r.effectiveRateBps / 100).toFixed(2)}%`,
+      b2(r.principalFixed),
+      b2(r.interestFixed),
+      prepay > 0n ? b2(prepay) : '—',
+      b2(r.paymentFixed),
+      b2(r.balanceAfterFixed),
+      formatAccrualRange(r.accrualFrom, r.date),
+      String(r.accrualDays),
+    ]
+  })
 
   const payRows = [...x.payments]
     .sort((a, b) => (a.paidDate < b.paidDate ? 1 : -1))
