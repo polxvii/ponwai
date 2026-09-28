@@ -136,7 +136,8 @@ function TrackShell() {
         .filter((b) => b.item.loanId !== view.item.loanId)
         .map((b) => ({
           loanId: b.item.loanId,
-          rows: buildSchedule(toLoanTerms(b.full), toPaymentEvents(b.full)).rows,
+          // ใส่แผนโปะของสัญญานั้นด้วย ไม่งั้นเพดานภาษีคิดจากดอกที่ไม่ตรงกับหน้าอื่น
+          rows: buildSchedule(toLoanTerms(b.full), toPaymentEvents(b.full), b.plan ?? undefined).rows,
         }))
       return (
         <PrepayPage

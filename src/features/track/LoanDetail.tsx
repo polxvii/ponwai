@@ -20,6 +20,7 @@ import {
   formatThaiDate, pct,
 } from '@/lib/format'
 import { downloadCsv, paymentsCsv, reportName, scheduleCsv, yearSummaryCsv } from '@/lib/export'
+import { downloadHtml, loanReportHtml } from '@/lib/report'
 import {
   addPayment, getLoanFull, getPlan, removePayment, setScheduleOverride, toLoanTerms,
   toPaymentEvents, updatePayment,
@@ -257,13 +258,37 @@ export function LoanDetail({
         >
           แก้ไขสัญญา
         </button>
+        {/* รายงานอ่านเอง ส่วน CSV มีไว้เอาไปคำนวณต่อ — คนละงานกัน ต้องมีทั้งคู่ */}
+        <button
+          title="ไฟล์เดียวจบ มีตัวเลขสรุป กราฟ สรุปรายปี และตารางผ่อนครบ เปิดด้วยเบราว์เซอร์แล้วสั่งพิมพ์เป็น PDF ได้"
+          onClick={() =>
+            downloadHtml(
+              reportName(item.propertyName, 'report', today),
+              loanReportHtml({
+                propertyName: item.propertyName,
+                bankLabel: item.bankLabel,
+                contractDate: item.contractDate,
+                disbursedSatang: item.disbursedSatang,
+                installmentSatang: item.installmentSatang,
+                rows,
+                groups: groupSchedule(rows, axis),
+                payments: full.payments,
+                settled: paidPeriods,
+                today,
+              }),
+            )
+          }
+          className="tap rounded-md border border-[var(--color-rule)] px-4 py-2.5"
+        >
+          รายงานฉบับเต็ม
+        </button>
         <button
           onClick={() =>
             downloadCsv(reportName(item.propertyName, 'schedule', today), scheduleCsv(rows))
           }
           className="tap rounded-md border border-[var(--color-rule)] px-4 py-2.5"
         >
-          ส่งออกตารางผ่อน
+          ตารางผ่อน (CSV)
         </button>
         <button
           onClick={() =>
@@ -274,7 +299,7 @@ export function LoanDetail({
           }
           className="tap rounded-md border border-[var(--color-rule)] px-4 py-2.5"
         >
-          ส่งออกสรุปรายปี
+          สรุปรายปี (CSV)
         </button>
         {full.payments.length > 0 && (
           <button
@@ -286,7 +311,7 @@ export function LoanDetail({
             }
             className="tap rounded-md border border-[var(--color-rule)] px-4 py-2.5"
           >
-            ส่งออกการจ่าย
+            บันทึกการจ่าย (CSV)
           </button>
         )}
       </div>

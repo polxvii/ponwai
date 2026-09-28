@@ -23,10 +23,11 @@ import { SwipeX } from '@/components/SwipeX'
 import { BankMark } from '@/components/BankMark'
 import { baht, bahtRounded, formatDuration, formatThaiDate } from '@/lib/format'
 import { toLoanTerms, toPaymentEvents, type LoanFull, type LoanListItem } from '@/lib/db'
+import type { PrepayPlan } from '@engine/prepay.js'
 import { BalanceChart, TaxChart, YearBarsChart } from './charts'
 import { balanceOn, settledPeriods } from '@/lib/progress'
 
-export type LoanBundle = { item: LoanListItem; full: LoanFull }
+export type LoanBundle = { item: LoanListItem; full: LoanFull; plan: PrepayPlan | null }
 
 const ZERO = 0n as Fixed
 const CAP_BAHT = Number(TAX_DEDUCTION_CAP_SATANG) / 100
@@ -72,8 +73,10 @@ export function DashboardPage({
         return {
           ...b,
           events,
+          // ⚠️ ต้องใส่แผนโปะด้วย ไม่งั้นการ์ด "ปิดหนี้ ... ตามแผน" บอกคนละวันกับ
+          //    ตารางผ่อนในหน้ารายละเอียด ทั้งที่เป็นสัญญาเดียวกัน
+          actual: buildSchedule(terms, events, b.plan ?? undefined),
           // "ถ้าไม่โปะ" = ตารางที่ไม่ใส่เหตุการณ์จ่ายเลย ใช้เป็นฐานวัดว่าการโปะช่วยได้แค่ไหน
-          actual: buildSchedule(terms, events),
           noPrepay: buildSchedule(terms),
         }
       }),
