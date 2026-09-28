@@ -91,9 +91,22 @@ export function RefinancePage() {
         <ResetButton onReset={resetAll} />
       </header>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] lg:gap-10">
+      {/* ⚠️ ตอนยังไม่มีผลลัพธ์ ฝั่งขวาไม่มีอะไรให้แสดง การตรึงฝั่งกรอกไว้แคบ
+          จึงทำให้จอกว้างเหลือที่ว่างเปล่าครึ่งจอ ระหว่างกรอกจึงกางเต็มความกว้าง
+          แล้วค่อยสลับเป็นซ้าย-ขวาเมื่อมีผล เพื่อให้แก้ตัวเลขแล้วเห็นผลเปลี่ยนไปพร้อมกัน */}
+      <div
+        className={`grid gap-8 lg:gap-10 ${
+          outcomes.length > 0
+            ? 'lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)]'
+            : ''
+        }`}
+      >
         {/* min-w-0 จำเป็น: grid item ตั้งต้นเป็น min-width:auto ลูกที่กว้างจะดันคอลัมน์จนหน้าเลื่อนได้ */}
-        <div className="min-w-0 space-y-6">
+        <div
+          className={`min-w-0 ${
+            outcomes.length > 0 ? 'space-y-6' : 'grid gap-6 lg:grid-cols-2 lg:items-start xl:grid-cols-3'
+          }`}
+        >
           <CurrentLoanForm
             value={current}
             onChange={(p) => setCurrent({ ...current, ...p })}

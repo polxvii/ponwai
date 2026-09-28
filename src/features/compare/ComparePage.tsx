@@ -129,76 +129,93 @@ export function ComparePage() {
         <ResetButton onReset={resetAll} />
       </header>
 
-      {/* ⚠️ ฝั่งกรอกต้องกว้างขึ้นตามจอ ตรึงที่ 380 ตลอดทำให้จอ 1440 เหลือที่ว่างเปล่า
-          ส่วนฝั่งผลลัพธ์ยังได้ที่เหลือทั้งหมดเพราะตารางเทียบกว้างกว่าฟอร์มเสมอ */}
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] lg:gap-10 xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)]">
+      {/* ⚠️ ตอนยังไม่มีผลลัพธ์ ฝั่งขวาไม่มีอะไรให้แสดง การตรึงฝั่งกรอกไว้แคบ
+          จึงทำให้จอกว้างเหลือที่ว่างเปล่าครึ่งจอ ระหว่างกรอกจึงกางเต็มความกว้าง
+          แล้วค่อยสลับเป็นซ้าย-ขวาเมื่อมีผล เพื่อให้แก้ตัวเลขแล้วเห็นผลเปลี่ยนไปพร้อมกัน */}
+      <div
+        className={`grid gap-8 lg:gap-10 ${
+          ranked.length > 0
+            ? 'lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)]'
+            : ''
+        }`}
+      >
         {/* ---------- ฝั่งกรอก ---------- */}
         {/* min-w-0 จำเป็น: grid item ตั้งต้นเป็น min-width:auto ลูกที่กว้างจะดันคอลัมน์จนหน้าเลื่อนได้ */}
         <div className="min-w-0 space-y-6">
-          <section>
-            <h2 className="mb-3 text-row">เงื่อนไขร่วม</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="วงเงินกู้" suffix="บาท">
-                <NumberField
-                  value={common.loanAmount}
-                  onChange={(v) => setCommon({ ...common, loanAmount: v })}
-                />
-              </Field>
-              <Field label="ระยะเวลา" suffix="ปี">
-                <NumberField
-                  value={common.termYears}
-                  max={40}
-                  onChange={(v) => setCommon({ ...common, termYears: v })}
-                />
-              </Field>
-            </div>
-          </section>
-
-          <section className="rounded-lg border border-[var(--color-rule)] p-3">
-            <Toggle
-              checked={equalPayment}
-              onChange={setEqualPayment}
-              label="ล็อกค่างวดให้เท่ากันทุกธนาคาร"
-              hint="ถ้าค่างวดไม่เท่ากัน คือการเทียบกระแสเงินสดคนละชุด ผลลัพธ์จะไม่มีความหมาย"
-            />
-            {equalPayment && (
-              <div className="mt-2">
-                <Field
-                  label="ค่างวดที่จะจ่ายจริงต่อเดือน"
-                  suffix="บาท"
-                  hint="ตัวเลขนี้เป็นตัวขับการคำนวณทั้งหมด ค่างวดในใบเสนอของแต่ละธนาคารจะกลายเป็นข้อมูลอ้างอิง"
-                >
-                  <NumberField value={lockedPayment} onChange={setLockedPayment} />
+          <div className={ranked.length > 0 ? 'space-y-6' : 'grid gap-6 md:grid-cols-2 md:items-start'}>
+            <section>
+              <h2 className="mb-3 text-row">เงื่อนไขร่วม</h2>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="วงเงินกู้" suffix="บาท">
+                  <NumberField
+                    value={common.loanAmount}
+                    onChange={(v) => setCommon({ ...common, loanAmount: v })}
+                  />
+                </Field>
+                <Field label="ระยะเวลา" suffix="ปี">
+                  <NumberField
+                    value={common.termYears}
+                    max={40}
+                    onChange={(v) => setCommon({ ...common, termYears: v })}
+                  />
                 </Field>
               </div>
+            </section>
+
+            <section className="rounded-lg border border-[var(--color-rule)] p-3">
+              <Toggle
+                checked={equalPayment}
+                onChange={setEqualPayment}
+                label="ล็อกค่างวดให้เท่ากันทุกธนาคาร"
+                hint="ถ้าค่างวดไม่เท่ากัน คือการเทียบกระแสเงินสดคนละชุด ผลลัพธ์จะไม่มีความหมาย"
+              />
+              {equalPayment && (
+                <div className="mt-2">
+                  <Field
+                    label="ค่างวดที่จะจ่ายจริงต่อเดือน"
+                    suffix="บาท"
+                    hint="ตัวเลขนี้เป็นตัวขับการคำนวณทั้งหมด ค่างวดในใบเสนอของแต่ละธนาคารจะกลายเป็นข้อมูลอ้างอิง"
+                  >
+                    <NumberField value={lockedPayment} onChange={setLockedPayment} />
+                  </Field>
+                </div>
+              )}
+            </section>
+          </div>
+
+          <div
+            className={
+              ranked.length > 0
+                ? 'space-y-6'
+                : 'grid gap-6 md:grid-cols-2 md:items-start xl:grid-cols-3'
+            }
+          >
+            {drafts.map((d, i) => (
+              <OfferForm
+                key={d.id}
+                index={i}
+                draft={d}
+                termYears={common.termYears}
+                actualMonths={actualMonths.get(d.id) ?? null}
+                lockedPayment={locked}
+                onChange={(p) => update(d.id, p)}
+                {...(drafts.length > MIN_OFFERS ? { onRemove: () => removeOffer(d.id) } : {})}
+              />
+            ))}
+
+            {drafts.length < MAX_OFFERS ? (
+              <button
+                onClick={addOffer}
+                className="tap w-full rounded-lg border border-dashed border-[var(--color-rule)] py-3 text-[var(--color-interest)] hover:border-[var(--color-interest)] hover:bg-[var(--color-interest-tint)]"
+              >
+                + เพิ่มธนาคาร
+              </button>
+            ) : (
+              <p className="text-center text-meta text-[var(--color-ink-3)]">
+                เทียบพร้อมกันได้สูงสุด {MAX_OFFERS} ธนาคาร
+              </p>
             )}
-          </section>
-
-          {drafts.map((d, i) => (
-            <OfferForm
-              key={d.id}
-              index={i}
-              draft={d}
-              termYears={common.termYears}
-              actualMonths={actualMonths.get(d.id) ?? null}
-              lockedPayment={locked}
-              onChange={(p) => update(d.id, p)}
-              {...(drafts.length > MIN_OFFERS ? { onRemove: () => removeOffer(d.id) } : {})}
-            />
-          ))}
-
-          {drafts.length < MAX_OFFERS ? (
-            <button
-              onClick={addOffer}
-              className="tap w-full rounded-lg border border-dashed border-[var(--color-rule)] py-3 text-[var(--color-interest)] hover:border-[var(--color-interest)] hover:bg-[var(--color-interest-tint)]"
-            >
-              + เพิ่มธนาคาร
-            </button>
-          ) : (
-            <p className="text-center text-meta text-[var(--color-ink-3)]">
-              เทียบพร้อมกันได้สูงสุด {MAX_OFFERS} ธนาคาร
-            </p>
-          )}
+          </div>
         </div>
 
         {/* ---------- ฝั่งผลลัพธ์ ---------- */}
