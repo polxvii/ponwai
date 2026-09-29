@@ -79,7 +79,6 @@ function makeRandomCase(rnd: () => number): { terms: LoanTerms; plan?: PrepayPla
       repeatUntilYear: null,
       months,
       overrides: {},
-      lumps: [],
     }
   }
 

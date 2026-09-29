@@ -4,7 +4,7 @@ import { makeTerms, fixedStep } from './test-helpers.js'
 import { baht, formatFixedBaht, toFixed, type Satang, type Fixed } from './money.js'
 import { isoDate } from './date.js'
 import {
-  resolveMonthlyPrepay, resolvePrepayOn, resolveLumpsOn,
+  resolveMonthlyPrepay, resolvePrepayOn,
   planCoversYear, copyYearToOverrides, emptyPlan, type PrepayPlan,
 } from './prepay.js'
 
@@ -27,7 +27,6 @@ describe('TV-21 แผนโปะไม่เท่ากันรายเด�
     repeatUntilYear: null,
     months: tv21Months,
     overrides: {},
-    lumps: [],
   }
 
   const terms = makeTerms({
@@ -94,7 +93,6 @@ describe('TV-22 การ resolve ยอดโปะ', () => {
     repeatUntilYear: null,
     months: tv21Months,
     overrides: {},
-    lumps: [],
   }
 
   it('override ต้องชนะ prepay_months', () => {
@@ -109,52 +107,12 @@ describe('TV-22 การ resolve ยอดโปะ', () => {
     expect(resolveMonthlyPrepay(plan, 2029, 1)).toBe(s(0))
   })
 
-  it('lumps ต้อง "บวกเพิ่ม" ไม่ใช่ "แทนที่"', () => {
-    const plan: PrepayPlan = {
-      ...base,
-      lumps: [{ payDate: isoDate('2028-01-01'), amountSatang: s(50_000), label: 'โบนัส' }],
-    }
-    expect(resolveMonthlyPrepay(plan, 2028, 1)).toBe(s(5_000))
-    expect(resolveLumpsOn(plan, isoDate('2028-01-01'))).toBe(s(50_000))
-    expect(resolvePrepayOn(plan, isoDate('2028-01-01'))).toBe(s(55_000)) // 5,000 + 50,000
-  })
-
-  it('หลายก้อนในวันเดียว ต้องบวกรวมทั้งหมด', () => {
-    const plan: PrepayPlan = {
-      ...base,
-      lumps: [
-        { payDate: isoDate('2028-03-01'), amountSatang: s(10_000) },
-        { payDate: isoDate('2028-03-01'), amountSatang: s(20_000) },
-        { payDate: isoDate('2028-04-01'), amountSatang: s(7_000) },
-      ],
-    }
-    expect(resolvePrepayOn(plan, isoDate('2028-03-01'))).toBe(s(35_000)) // 5,000 + 10,000 + 20,000
-    expect(resolvePrepayOn(plan, isoDate('2028-04-01'))).toBe(s(11_000)) // 4,000 + 7,000
-  })
-
-  it('override + lump ซ้อนกัน ต้องเป็น override แล้วบวก lump', () => {
-    const plan: PrepayPlan = {
-      ...base,
-      overrides: { 2029: { 5: s(1_000) } },
-      lumps: [{ payDate: isoDate('2029-05-01'), amountSatang: s(30_000) }],
-    }
-    expect(resolvePrepayOn(plan, isoDate('2029-05-01'))).toBe(s(31_000))
-  })
-
-  it('lump ที่ไม่ตรงวันตัด ต้องไม่ถูกดึงมา', () => {
-    const plan: PrepayPlan = {
-      ...base,
-      lumps: [{ payDate: isoDate('2028-01-15'), amountSatang: s(50_000) }],
-    }
-    expect(resolvePrepayOn(plan, isoDate('2028-01-01'))).toBe(s(5_000))
-    expect(resolveLumpsOn(plan, isoDate('2028-01-15'))).toBe(s(50_000))
-  })
 })
 
 describe('repeatMode', () => {
   const mk = (mode: PrepayPlan['repeatMode'], until: number | null = null): PrepayPlan => ({
     baseYear: 2027, repeatMode: mode, repeatUntilYear: until,
-    months: tv21Months, overrides: {}, lumps: [],
+    months: tv21Months, overrides: {},
   })
 
   it('single_year ใช้เฉพาะปีฐาน', () => {
@@ -187,7 +145,7 @@ describe('คัดลอกไปปีถัดไป', () => {
   it('สร้าง override ชุดใหม่จากยอดที่ resolve ได้ของปีต้นทาง', () => {
     const plan: PrepayPlan = {
       baseYear: 2027, repeatMode: 'repeat_forever', repeatUntilYear: null,
-      months: tv21Months, overrides: { 2028: { 1: s(8_000) } }, lumps: [],
+      months: tv21Months, overrides: { 2028: { 1: s(8_000) } },
     }
     const copied = copyYearToOverrides(plan, 2028, 2029)
     expect(resolveMonthlyPrepay(copied, 2029, 1)).toBe(s(8_000))  // มาจาก override ของ 2028

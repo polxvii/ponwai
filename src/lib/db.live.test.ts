@@ -194,9 +194,6 @@ describe.skipIf(EMAIL === '' || PASSWORD === '')('db.ts กับ Supabase จ�
       // ⚠️ override ที่เป็น 0 ต้องรอด ไม่ใช่ถูกตัดทิ้งเหมือน months ที่เป็น 0
       //    เพราะ 0 แปลว่า "ปีนี้เดือนนี้ไม่โปะ" ซึ่งชนะแผนฐาน
       overrides: { 2028: { 4: 0n as Satang, 5: baht(9_000) as Satang } },
-      lumps: [
-        { payDate: isoDate('2026-12-05'), amountSatang: baht(50_000) as Satang, label: 'โบนัส' },
-      ],
     }
 
     const scenarioId = await saveScenario(loanId, 'แผนทดสอบ', plan)
@@ -210,8 +207,6 @@ describe.skipIf(EMAIL === '' || PASSWORD === '')('db.ts กับ Supabase จ�
     expect(Number(back.months[11])).toBe(450_000)
     expect(Number(back.overrides[2028]![4])).toBe(0)
     expect(Number(back.overrides[2028]![5])).toBe(900_000)
-    expect(back.lumps).toHaveLength(1)
-    expect(back.lumps[0]!.label).toBe('โบนัส')
 
     await deleteScenario(scenarioId)
     expect(await listScenarios(loanId)).toHaveLength(0)

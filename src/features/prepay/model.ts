@@ -13,13 +13,6 @@ import { baht, type Satang } from '@engine/money.js'
 import { isoDate, type ISODate } from '@engine/date.js'
 import type { PrepayPlan, PrepayRepeatMode } from '@engine/prepay.js'
 
-export type LumpDraft = {
-  id: string
-  payDate: ISODate
-  amount: number | ''
-  label: string
-}
-
 export type PrepayDraft = {
   baseYear: number
   repeatMode: PrepayRepeatMode
@@ -28,7 +21,6 @@ export type PrepayDraft = {
   months: Record<number, number>
   /** ปี -> เดือน -> บาท เฉพาะปีที่ต่างจากปีฐาน */
   overrides: Record<number, Record<number, number>>
-  lumps: LumpDraft[]
 }
 
 export function emptyDraft(baseYear: number): PrepayDraft {
@@ -38,7 +30,6 @@ export function emptyDraft(baseYear: number): PrepayDraft {
     repeatUntilYear: '',
     months: {},
     overrides: {},
-    lumps: [],
   }
 }
 
@@ -56,7 +47,7 @@ export const PRESET_CHIPS: readonly { value: number; label: string }[] = [
   { value: 10_000, label: '10,000' },
 ]
 
-/** ยอดของเดือนหนึ่งในปีที่กำลังแก้ — ยังไม่รวม lumps */
+/** ยอดของเดือนหนึ่งในปีที่กำลังแก้ */
 export function amountAt(d: PrepayDraft, year: number, month: number): number {
   const override = d.overrides[year]?.[month]
   if (override !== undefined) return override
@@ -164,13 +155,6 @@ export function toPlan(d: PrepayDraft): PrepayPlan {
     repeatUntilYear: typeof d.repeatUntilYear === 'number' ? d.repeatUntilYear : null,
     months,
     overrides,
-    lumps: d.lumps
-      .filter((l) => typeof l.amount === 'number' && l.amount > 0)
-      .map((l) => ({
-        payDate: l.payDate,
-        amountSatang: toSatang(l.amount as number),
-        ...(l.label.trim() !== '' ? { label: l.label.trim() } : {}),
-      })),
   }
 }
 
@@ -191,21 +175,6 @@ export function fromPlan(p: PrepayPlan): PrepayDraft {
     repeatUntilYear: p.repeatUntilYear ?? '',
     months,
     overrides,
-    lumps: p.lumps.map((l, i) => ({
-      id: `l${i}`,
-      payDate: l.payDate,
-      amount: Number(l.amountSatang) / 100,
-      label: l.label ?? '',
-    })),
-  }
-}
-
-export function newLump(today: ISODate): LumpDraft {
-  return {
-    id: `l${Date.now().toString(36)}`,
-    payDate: isoDate(today),
-    amount: '',
-    label: '',
   }
 }
 

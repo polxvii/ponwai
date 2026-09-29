@@ -24,7 +24,6 @@ const plan: PrepayPlan = {
     8: s(4_000), 9: s(4_000), 10: s(4_000), 11: s(4_000), 12: s(0),
   },
   overrides: {},
-  lumps: [],
 }
 
 const terms = makeTerms({

@@ -719,13 +719,6 @@ export async function saveScenario(
       must(await supabase.from('prepay_overrides').insert(overrides).select('id'))
     }
 
-    const lumps = plan.lumps.map((l) => ({
-      plan_id: planRow.id,
-      pay_date: l.payDate,
-      amount_satang: Number(l.amountSatang),
-      label: l.label ?? null,
-    }))
-    if (lumps.length > 0) must(await supabase.from('prepay_lumps').insert(lumps).select('id'))
 
     return scenario.id
   } catch (e) {
@@ -749,17 +742,14 @@ export async function loadScenario(scenarioId: string): Promise<PrepayPlan> {
     repeat_until_year: number | null
   }
 
-  const [m, o, l] = await Promise.all([
+  // ⛔ ไม่อ่าน prepay_lumps อีกแล้ว — ฟีเจอร์ "โปะก้อนตามวันที่" ถูกถอดออก
+  //    ตารางยังอยู่เพื่อไม่ทำลายข้อมูลเก่า แต่ไม่มีใครเขียนหรืออ่าน
+  const [m, o] = await Promise.all([
     supabase.from('prepay_months').select('month, amount_satang').eq('plan_id', planRow.id),
     supabase
       .from('prepay_overrides')
       .select('year, month, amount_satang')
       .eq('plan_id', planRow.id),
-    supabase
-      .from('prepay_lumps')
-      .select('pay_date, amount_satang, label')
-      .eq('plan_id', planRow.id)
-      .order('pay_date'),
   ])
 
   const months: Record<number, Satang> = {}
@@ -778,13 +768,6 @@ export async function loadScenario(scenarioId: string): Promise<PrepayPlan> {
     repeatUntilYear: planRow.repeat_until_year,
     months,
     overrides,
-    lumps: (must(l) as { pay_date: string; amount_satang: number; label: string | null }[]).map(
-      (r) => ({
-        payDate: isoDate(r.pay_date),
-        amountSatang: sat(r.amount_satang),
-        ...(r.label !== null ? { label: r.label } : {}),
-      }),
-    ),
   }
 }
 

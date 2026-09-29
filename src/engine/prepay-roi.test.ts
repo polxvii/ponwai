@@ -28,7 +28,6 @@ function planOf(monthly: number): PrepayPlan {
     repeatUntilYear: null,
     months,
     overrides: {},
-    lumps: [],
   }
 }
 

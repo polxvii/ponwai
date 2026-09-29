@@ -29,7 +29,7 @@ import {
 import {
   MONTH_NAMES, PRESET_CHIPS,
   amountAt, bumpMonths, clearYearOverride, copyYear, emptyDraft, fromPlan, monthRange,
-  baseRepeatsForward, isRepeatedFromBase, newLump, setMonths, toPlan,
+  baseRepeatsForward, isRepeatedFromBase, setMonths, toPlan,
   type PrepayDraft,
 } from './model'
 
@@ -772,8 +772,6 @@ export function PrepayPage({
         )}
       </section>
 
-      <LumpSection draft={draft} onChange={setDraft} today={today} />
-
       {/* ---------- สถานะการบันทึก ---------- */}
       <section className="mt-8">
         <h2 className="text-row">แผนโปะของสัญญานี้</h2>
@@ -1059,74 +1057,3 @@ function ListView({ rows, year }: { rows: readonly ScheduleRow[]; year: number }
   )
 }
 
-/** ก้อนเดี่ยวตามวันที่ เช่น โบนัส — บวกเพิ่มจากยอดรายเดือน ไม่ใช่แทนที่ (TV-22) */
-function LumpSection({
-  draft,
-  onChange,
-  today,
-}: {
-  draft: PrepayDraft
-  onChange: (d: PrepayDraft) => void
-  today: ISODate
-}) {
-  return (
-    <section className="mt-4 rounded-lg border border-[var(--color-rule)] p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-row">โปะก้อนตามวันที่</h2>
-        <button
-          onClick={() => onChange({ ...draft, lumps: [...draft.lumps, newLump(today)] })}
-          className="tap text-meta text-[var(--color-interest)] hover:underline"
-        >
-          + เพิ่มก้อน
-        </button>
-      </div>
-      <p className="mt-1 text-meta text-[var(--color-ink-2)]">
-        บวกเพิ่มจากยอดรายเดือน ไม่ใช่แทนที่ — ต้องตรงวันตัดงวดถึงจะถูกนับในงวดนั้น
-      </p>
-
-      {draft.lumps.map((l, i) => (
-        <div key={l.id} className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto]">
-          <Field label="วันที่จ่าย" hint={formatThaiDate(l.payDate)}>
-            <DateField
-              value={l.payDate}
-              onChange={(v) => {
-                const next = [...draft.lumps]
-                next[i] = { ...l, payDate: isoDate(v) }
-                onChange({ ...draft, lumps: next })
-              }}
-            />
-          </Field>
-          <Field label="จำนวน" suffix="บาท">
-            <NumberField
-              value={l.amount}
-              onChange={(v) => {
-                const next = [...draft.lumps]
-                next[i] = { ...l, amount: v }
-                onChange({ ...draft, lumps: next })
-              }}
-            />
-          </Field>
-          <Field label="หมายเหตุ">
-            <TextField
-              value={l.label}
-              onChange={(v) => {
-                const next = [...draft.lumps]
-                next[i] = { ...l, label: v }
-                onChange({ ...draft, lumps: next })
-              }}
-              placeholder="โบนัส"
-            />
-          </Field>
-          <button
-            onClick={() =>
-              onChange({ ...draft, lumps: draft.lumps.filter((x) => x.id !== l.id) })
-            }
-            className="tap self-end pb-2 text-meta text-[var(--color-ink-3)] hover:text-[var(--color-warn)]"
-          >
-            ลบ
-          </button>
-        </div>
-      ))}
-    </section>
-  )
-}
