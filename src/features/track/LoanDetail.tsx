@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { buildSchedule } from '@engine/schedule.js'
-import { groupSchedule, type GroupAxis } from '@engine/grouping.js'
+import { groupSchedule, summariseTaxYears, type GroupAxis } from '@engine/grouping.js'
 import { findInstallment } from '@engine/rates.js'
 import { daysBetween, type ISODate } from '@engine/date.js'
 import { toFixed, type Fixed, type Satang } from '@engine/money.js'
@@ -22,7 +22,8 @@ import {
 import { downloadCsv, paymentsCsv, reportName, scheduleCsv, yearSummaryCsv } from '@/lib/export'
 import { downloadHtml, loanReportHtml } from '@/lib/report'
 import {
-  addPayment, getLoanFull, getPlan, removePayment, setScheduleOverride, toLoanTerms,
+  addPayment, getLoanFull, getMarginalTaxRateBps, getPlan, removePayment,
+  setScheduleOverride, toLoanTerms,
   toPaymentEvents, updatePayment,
   type LoanFull, type LoanListItem, type StoredPayment,
 } from '@/lib/db'
@@ -40,8 +41,14 @@ export function LoanDetail({
   onPlanPrepay,
   onReconcile,
   onEdit,
+  otherLoans = [],
 }: {
   item: LoanListItem
+  /**
+   * สัญญาอื่นของคนเดียวกัน ใช้คิดเพดานลดหย่อนร่วมในรายงานที่ส่งออก
+   * ⛔ เพดาน 100,000 เป็นของ "คน" ไม่ใช่ของ "สัญญา" (ข้อ 1.9)
+   */
+  otherLoans?: readonly { loanId: string; rows: readonly ScheduleRow[] }[]
   onBack: () => void
   onPlanPrepay: () => void
   onReconcile: () => void
@@ -84,6 +91,15 @@ export function LoanDetail({
   }, [item.loanId, reloadKey])
 
   const today = todayISO()
+  /** อัตราภาษีที่ผู้ใช้กรอกไว้ — ใช้แสดงมูลค่าภาษีที่ประหยัดได้ในรายงาน */
+  const [taxRateBps, setTaxRateBps] = useState<number | null>(null)
+  useEffect(() => {
+    let alive = true
+    getMarginalTaxRateBps()
+      .then((v) => { if (alive) setTaxRateBps(v) })
+      .catch(() => undefined)
+    return () => { alive = false }
+  }, [])
 
   const computed = useMemo(() => {
     if (!full) return null
@@ -271,7 +287,13 @@ export function LoanDetail({
                 disbursedSatang: item.disbursedSatang,
                 installmentSatang: item.installmentSatang,
                 rows,
-                groups: groupSchedule(rows, axis),
+                groups: groupSchedule(rows, 'contract_year'),
+                groupsCalendar: groupSchedule(rows, 'calendar_year'),
+                taxYears: summariseTaxYears([
+                  { loanId: item.loanId, rows },
+                  ...otherLoans,
+                ]),
+                marginalTaxRateBps: taxRateBps,
                 payments: full.payments,
                 scheduledOf: (period) =>
                   toFixed(findInstallment(terms.installmentSteps, period, terms.installmentSatang)),

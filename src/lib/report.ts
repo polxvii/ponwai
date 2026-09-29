@@ -15,7 +15,8 @@
 import type { Fixed, Satang } from '@engine/money.js'
 import { FIXED_SCALE } from '@engine/money.js'
 import type { ScheduleRow } from '@engine/types.js'
-import type { YearGroup } from '@engine/grouping.js'
+import type { YearGroup, TaxYearSummary } from '@engine/grouping.js'
+import { TAX_DEDUCTION_CAP_SATANG } from '@engine/grouping.js'
 import type { ISODate } from '@engine/date.js'
 import { formatThaiDate, formatAccrualRange } from './format'
 import { prepayOfRow } from './progress'
@@ -128,7 +129,18 @@ export type ReportInput = {
   disbursedSatang: Satang
   installmentSatang: Satang
   rows: readonly ScheduleRow[]
+  /** สรุปตามปีสัญญา — ปีที่ 1 เริ่มนับจากงวดแรก */
   groups: readonly YearGroup[]
+  /** สรุปตามปีปฏิทิน — ตัวที่ใช้เทียบกับหนังสือรับรองดอกเบี้ยตอนยื่นภาษี */
+  groupsCalendar: readonly YearGroup[]
+  /**
+   * สิทธิลดหย่อนรายปี นับรวมทุกสัญญาของคนคนนี้แล้ว
+   * ⛔ เพดาน 100,000 เป็นของ "คน" ไม่ใช่ของ "สัญญา" (ข้อ 1.9)
+   *    ถ้าคิดจากสัญญาเดียวจะบอกว่ายังเหลือเพดาน ทั้งที่อีกสัญญากินไปเต็มแล้ว
+   */
+  taxYears: readonly TaxYearSummary[]
+  /** null = ผู้ใช้ยังไม่กรอกอัตราภาษี ⛔ ห้ามเดาแทน */
+  marginalTaxRateBps: number | null
   payments: readonly StoredPayment[]
   /**
    * ค่างวดตามสัญญาของงวดนั้น — ใช้แยกว่าส่วนไหนของยอดที่จ่ายคือเงินโปะ
@@ -168,15 +180,30 @@ export function loanReportHtml(x: ReportInput): string {
     ['ปิดหนี้', payoff ? formatThaiDate(payoff.date, 'monthYear') : '—', 'ตามแผนปัจจุบัน'],
   ]
 
-  const yearRows = x.groups.map((g) => [
-    g.label,
-    String(g.periodCount) + (g.isPartialYear ? ' (ไม่ครบปี)' : ''),
-    b2(g.interestFixed),
-    b2(g.principalFixed),
-    b2(g.paymentFixed),
-    `${(g.effectiveRateBps / 100).toFixed(2)}%`,
-    b2(g.closingBalanceFixed),
-  ])
+  const yearTable = (gs: readonly YearGroup[]): readonly (readonly string[])[] =>
+    gs.map((g) => [
+      g.label,
+      String(g.periodCount) + (g.isPartialYear ? ' (ไม่ครบปี)' : ''),
+      b2(g.interestFixed),
+      b2(g.principalFixed),
+      b2(g.paymentFixed),
+      `${(g.effectiveRateBps / 100).toFixed(2)}%`,
+      b2(g.closingBalanceFixed),
+    ])
+
+  const CAP = (TAX_DEDUCTION_CAP_SATANG * FIXED_SCALE) as Fixed
+  const rate = x.marginalTaxRateBps
+  const taxRows = x.taxYears.map((t) => {
+    const unused = (CAP - t.deductibleFixed) as Fixed
+    return [
+      String(t.taxYear + 543),
+      b2(t.totalInterestFixed),
+      b2(t.deductibleFixed),
+      unused > 0n ? b2(unused) : '—',
+      t.excessFixed > 0n ? b2(t.excessFixed) : '—',
+      rate === null ? '—' : b2(((t.deductibleFixed * BigInt(rate)) / 10_000n) as Fixed),
+    ]
+  })
 
   const schedRows = x.rows.map((r) => {
     const prepay = prepayOfRow(r, x.scheduledOf(r.index))
@@ -241,6 +268,7 @@ export function loanReportHtml(x: ReportInput): string {
   .card .n { font-size: 11px; color: ${C.panelInk2}; margin: 0 }
   .panel { background: ${C.card}; border: 1px solid ${C.rule}; border-radius: 10px; padding: 14px }
   .legend { font-size: 12px; color: ${C.ink2}; margin-top: 6px }
+  .note { font-size: 12px; color: ${C.ink2}; margin: -4px 0 10px }
   .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin: 0 4px 0 12px }
   .legend .sw:first-child { margin-left: 0 }
   table { width: 100%; border-collapse: collapse; background: ${C.card}; font-size: 12.5px }
@@ -272,8 +300,28 @@ export function loanReportHtml(x: ReportInput): string {
     <p class="legend"><span class="sw" style="background:${C.interest}"></span>ดอกเบี้ย<span class="sw" style="background:${C.principal}"></span>เงินต้น</p>
   </div>
 
-  <h2>สรุปรายปี</h2>
-  <div class="scroll">${table(['ปี', 'งวด', 'ดอกเบี้ย', 'เงินต้น', 'ยอดจ่ายจริง', 'อัตราที่จ่ายจริง', 'คงเหลือสิ้นปี'], yearRows, 1)}</div>
+  <h2>สรุปตามปีสัญญา</h2>
+  <p class="note">ปีที่ 1 นับจากงวดแรกของสัญญา ไม่ใช่เดือนมกราคม</p>
+  <div class="scroll">${table(['ปี', 'งวด', 'ดอกเบี้ย', 'เงินต้น', 'ยอดจ่ายจริง', 'อัตราที่จ่ายจริง', 'คงเหลือสิ้นปี'], yearTable(x.groups), 1)}</div>
+
+  <h2>สรุปตามปีปฏิทิน</h2>
+  <p class="note">ใช้เทียบกับหนังสือรับรองดอกเบี้ยที่ธนาคารออกให้ตอนยื่นภาษี</p>
+  <div class="scroll">${table(['ปี', 'งวด', 'ดอกเบี้ย', 'เงินต้น', 'ยอดจ่ายจริง', 'อัตราที่จ่ายจริง', 'คงเหลือสิ้นปี'], yearTable(x.groupsCalendar), 1)}</div>
+
+  ${
+    taxRows.length > 0
+      ? `<h2>สิทธิลดหย่อนดอกเบี้ยรายปี</h2>
+  <p class="note">เพดาน ${b2(CAP)} บาทต่อคนต่อปี นับรวมทุกสัญญาของคุณแล้ว —
+    &quot;เหลือเพดาน&quot; แปลว่าดอกเบี้ยไม่พอจะใช้สิทธิให้เต็ม ซึ่งเป็นผลจากหนี้ที่ลดลง ไม่ใช่ข้อผิดพลาด${
+      rate === null ? ' · กรอกอัตราภาษีในแอพเพื่อดูมูลค่าภาษีที่ประหยัดได้' : ''
+    }</p>
+  <div class="scroll">${table(
+    ['ปีภาษี', 'ดอกเบี้ยรวมทุกสัญญา', 'ใช้สิทธิได้', 'เหลือเพดาน', 'เกินเพดาน', 'ประหยัดภาษี'],
+    taxRows,
+    1,
+  )}</div>`
+      : ''
+  }
 
   ${paymentsSection}
 

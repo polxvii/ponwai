@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { buildSchedule } from '@engine/schedule.js'
-import { groupSchedule } from '@engine/grouping.js'
+import { groupSchedule, summariseTaxYears } from '@engine/grouping.js'
 import { makeTerms, fixedStep } from '@engine/test-helpers.js'
 import { baht, toFixed, type Fixed } from '@engine/money.js'
 import { isoDate } from '@engine/date.js'
@@ -46,6 +46,9 @@ function report(over: Partial<ReportInput> = {}): string {
     installmentSatang: baht(20_000),
     rows: ROWS,
     groups: GROUPS,
+    groupsCalendar: groupSchedule(ROWS, 'calendar_year'),
+    taxYears: summariseTaxYears([{ loanId: 'L1', rows: ROWS }]),
+    marginalTaxRateBps: 2000,
     payments: [],
     scheduledOf: () => toFixed(baht(20_000)),
     settled: 12,
@@ -78,12 +81,31 @@ describe('TV-52 ความปลอดภัยของรายงาน', (
 })
 
 describe('TV-52 เนื้อหาของรายงาน', () => {
-  it('มีครบทุกแถวของตารางผ่อนและสรุปรายปี ไม่ตัดทิ้ง', () => {
+  it('มีครบทุกตารางและทุกแถว ไม่ตัดทิ้ง', () => {
     const html = report()
     const bodies = [...html.matchAll(/<tbody>(.*?)<\/tbody>/gs)].map(
       (m) => (m[1]!.match(/<tr>/g) ?? []).length,
     )
-    expect(bodies).toEqual([GROUPS.length, ROWS.length])
+    // ปีสัญญา · ปีปฏิทิน · สิทธิลดหย่อนรายปี · ตารางผ่อน
+    const taxYears = summariseTaxYears([{ loanId: 'L1', rows: ROWS }])
+    expect(bodies).toEqual([
+      GROUPS.length,
+      groupSchedule(ROWS, 'calendar_year').length,
+      taxYears.length,
+      ROWS.length,
+    ])
+  })
+
+  it('มีทั้งสรุปปีสัญญาและปีปฏิทิน — ปีปฏิทินคือตัวที่เทียบกับเอกสารภาษี', () => {
+    const html = report()
+    expect(html).toContain('สรุปตามปีสัญญา')
+    expect(html).toContain('สรุปตามปีปฏิทิน')
+    expect(html).toContain('สิทธิลดหย่อนดอกเบี้ยรายปี')
+  })
+
+  it('ไม่กรอกอัตราภาษี = ไม่เดาแทน ช่องประหยัดภาษีต้องเป็นขีด', () => {
+    const html = report({ marginalTaxRateBps: null })
+    expect(html).toContain('กรอกอัตราภาษีในแอพ')
   })
 
   it('ไม่มีรายการจ่าย = ไม่ต้องมีหัวข้อบันทึกการจ่ายให้เกะกะ', () => {
