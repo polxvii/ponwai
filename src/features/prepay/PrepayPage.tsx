@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildSchedule } from '@engine/schedule.js'
 import { findInstallment } from '@engine/rates.js'
 import { evaluatePrepayPlan } from '@engine/prepay-roi.js'
+import { summariseTaxYears, TAX_DEDUCTION_CAP_SATANG } from '@engine/grouping.js'
 import { FIXED_SCALE, toFixed, type Fixed } from '@engine/money.js'
 import { month as monthOf, year as yearOf, type ISODate } from '@engine/date.js'
 import type { ScheduleRow } from '@engine/types.js'
@@ -36,6 +37,9 @@ export type OtherLoan = { loanId: string; rows: readonly ScheduleRow[] }
 
 /** JSON.stringify โยนทิ้งเมื่อเจอ bigint — แผนเก็บยอดเป็น Satang ซึ่งเป็น bigint */
 const bigintText = (_k: string, v: unknown) => (typeof v === 'bigint' ? v.toString() : v)
+
+/** เพดานลดหย่อนในหน่วย Fixed — TAX_DEDUCTION_CAP_SATANG เป็นสตางค์ */
+const CAP_FIXED = (TAX_DEDUCTION_CAP_SATANG * FIXED_SCALE) as Fixed
 
 export function PrepayPage({
   item,
@@ -118,6 +122,38 @@ export function PrepayPage({
   }, [draft, terms, events, baseline, item.loanId, otherLoans, taxRateBps])
 
   const lastYear = yearOf((withPlan.rows[withPlan.rows.length - 1] ?? baseline.rows[0]!).date)
+
+  /**
+   * สิทธิลดหย่อนดอกเบี้ยรายปี เทียบก่อน–หลังใส่แผนโปะ
+   *
+   * ⛔ เพดาน 100,000 เป็นของ "คน" ไม่ใช่ของ "สัญญา" (ข้อ 1.9)
+   *    จึงต้องส่งสัญญาอื่นเข้าไปด้วย ไม่งั้นจะบอกว่ายังเหลือเพดาน
+   *    ทั้งที่อีกสัญญากินไปเต็มแล้ว
+   *
+   * ⚠️ ตัวเลขนี้มีไว้ให้เห็นผลข้างเคียง ไม่ใช่เป้าหมายที่ต้องไปทำให้ถึง
+   *    การคงหนี้ไว้เพื่อรักษาสิทธิ = จ่ายดอก 1 บาทเพื่อได้ภาษีคืน 10-35 สตางค์
+   */
+  const taxRows = useMemo(() => {
+    const mine = { loanId: item.loanId, rows: baseline.rows }
+    const before = summariseTaxYears([mine, ...otherLoans])
+    const after = summariseTaxYears([{ loanId: item.loanId, rows: withPlan.rows }, ...otherLoans])
+    const afterByYear = new Map(after.map((t) => [t.taxYear, t]))
+    const from = yearOf(today)
+    return before
+      .filter((b) => b.taxYear >= from)
+      .slice(0, 10)
+      .map((b) => {
+        const a = afterByYear.get(b.taxYear)
+        const deductible = a?.deductibleFixed ?? (0n as Fixed)
+        return {
+          year: b.taxYear,
+          before: b.totalInterestFixed,
+          after: a?.totalInterestFixed ?? (0n as Fixed),
+          deductible,
+          unused: (CAP_FIXED - deductible) as Fixed,
+        }
+      })
+  }, [baseline, withPlan, otherLoans, item.loanId, today])
 
   /**
    * ยอดที่จ่ายเกินค่างวดไปแล้วจริง ของงวดที่เลยวันตัดมาแล้ว
@@ -481,6 +517,68 @@ export function PrepayPage({
           />
         </Field>
       </section>
+
+      {/* ---------- สิทธิลดหย่อนรายปี ---------- */}
+      {taxRows.length > 0 && (
+        <section className="mt-6">
+          <h2 className="text-row">สิทธิลดหย่อนดอกเบี้ยรายปี</h2>
+          <p className="mt-1 text-meta text-[var(--color-ink-2)]">
+            เพดาน {bahtRounded(CAP_FIXED)} บาทต่อคนต่อปี นับรวมทุกสัญญาของคุณแล้ว
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[420px] border-collapse text-meta">
+              <thead>
+                <tr className="border-b border-[var(--color-rule)] text-left">
+                  <th className="py-2 pr-4 font-medium text-[var(--color-ink-2)]">ปี</th>
+                  <th className="py-2 pr-4 text-right font-medium text-[var(--color-ink-2)]">
+                    ถ้าไม่โปะเพิ่ม
+                  </th>
+                  <th className="py-2 pr-4 text-right font-medium text-[var(--color-ink-2)]">
+                    ตามแผนนี้
+                  </th>
+                  <th className="py-2 pr-4 text-right font-medium text-[var(--color-ink-2)]">
+                    ใช้สิทธิได้
+                  </th>
+                  <th className="py-2 text-right font-medium text-[var(--color-ink-2)]">
+                    เหลือเพดาน
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {taxRows.map((r) => (
+                  <tr key={r.year} className="border-b border-[var(--color-rule)]">
+                    <td className="py-2 pr-4 whitespace-nowrap">{r.year + 543}</td>
+                    <td className="py-2 pr-4 text-right num text-[var(--color-ink-3)]">
+                      {bahtRounded(r.before)}
+                    </td>
+                    <td className="py-2 pr-4 text-right num">{bahtRounded(r.after)}</td>
+                    <td className="py-2 pr-4 text-right num font-medium">
+                      {bahtRounded(r.deductible)}
+                    </td>
+                    {/* เหลือเพดาน = ดอกไม่พอจะใช้สิทธิให้เต็ม ไม่ใช่ความผิดพลาดที่ต้องไปแก้ */}
+                    <td className="py-2 text-right num text-[var(--color-ink-3)]">
+                      {r.unused > 0n ? bahtRounded(r.unused) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ⛔ ห้ามใส่ปุ่ม "เฉลี่ยยอดโปะให้พอดีเพดาน"
+              การคงหนี้ไว้เพื่อรักษาสิทธิคือจ่ายดอก 1 บาทเพื่อได้ภาษีคืน 10-35 สตางค์
+              ขาดทุนทุกอัตราภาษี ต้องบอกส่วนต่างสุทธิให้เห็น ไม่ใช่ช่วยให้ทำสิ่งที่เสียเปรียบ */}
+          {outcome.deductionLostFixed > 0n && (
+            <p className="mt-3 text-micro text-[var(--color-ink-2)]">
+              แผนนี้ทำให้ใช้สิทธิลดหย่อนได้น้อยลงรวม {bahtRounded(outcome.deductionLostFixed)} บาท
+              {taxRateBps !== null &&
+                ` = เสียภาษีเพิ่มประมาณ ${bahtRounded(((outcome.deductionLostFixed * BigInt(taxRateBps)) / 10_000n) as Fixed)} บาท`}
+              {' '}แต่ประหยัดดอกเบี้ยจริง {bahtRounded(outcome.interestSavedFixed)} บาท —
+              การคงหนี้ไว้เพื่อรักษาสิทธิคือจ่ายดอกเต็มจำนวนเพื่อได้ภาษีคืนบางส่วน จึงไม่คุ้มทุกอัตราภาษี
+            </p>
+          )}
+        </section>
+      )}
 
       {/* ---------- สลับมุมมอง ---------- */}
       <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
