@@ -82,6 +82,9 @@ export function DashboardPage({
         // ⚠️ closedDate ใช้ตัดตาราง ส่วน isClosed ใช้ตัดสินว่านับเข้าหนี้รวมไหม
         //    แยกกันเพราะสัญญาที่ปิดแล้วแต่ไม่มีวันปิด ต้องไม่ถูกนับเป็นหนี้ที่ยังผ่อนอยู่
         const closedDate = isClosed ? b.item.closedDate : null
+        // ⚠️ สร้างครั้งเดียว ใช้สองที่ (ตารางเต็มกับตารางที่ตัดแล้ว) — buildSchedule
+        //    เดินทีละวันตลอด 30 ปี เรียกซ้ำคือเดินซ้ำทั้งสัญญาโดยไม่ได้อะไรเพิ่ม
+        const noPrepay = buildSchedule(terms)
         return {
           ...b,
           events,
@@ -96,8 +99,15 @@ export function DashboardPage({
            */
           rows: rowsUntilClose(actual.rows, closedDate),
           actual,
-          // "ถ้าไม่โปะ" = ตารางที่ไม่ใส่เหตุการณ์จ่ายเลย ใช้เป็นฐานวัดว่าการโปะช่วยได้แค่ไหน
-          noPrepay: buildSchedule(terms),
+          /**
+           * "ถ้าไม่โปะ" = ตารางที่ไม่ใส่เหตุการณ์จ่ายเลย ใช้เป็นฐานวัดว่าการโปะช่วยได้แค่ไหน
+           *
+           * ⛔ ต้องตัดที่วันปิดเหมือนกัน ไม่งั้นเทียบตาราง 18 งวดกับตาราง 360 งวด
+           *    แล้วได้ข้อสรุปว่า "โปะจนเร็วขึ้น 28 ปี" ซึ่งไม่จริง —
+           *    หนี้ที่เหลือถูกย้ายไปสัญญาใหม่ ไม่ได้หายไปเพราะการโปะ
+           */
+          noPrepayRows: rowsUntilClose(noPrepay.rows, closedDate),
+          noPrepay,
         }
       }),
     [bundles, today],
@@ -145,8 +155,8 @@ export function DashboardPage({
    * ยอดคงเหลือต่างกันแม้งวดเดียวก็ถือว่าโปะแล้ว เพราะจำนวนงวดอาจเท่าเดิมได้
    */
   const hasPrepay =
-    rows.length !== selected.noPrepay.rows.length ||
-    rows.some((r, i) => r.balanceAfterFixed !== selected.noPrepay.rows[i]?.balanceAfterFixed)
+    rows.length !== selected.noPrepayRows.length ||
+    rows.some((r, i) => r.balanceAfterFixed !== selected.noPrepayRows[i]?.balanceAfterFixed)
 
   // ---------- หน้าต่างที่กราฟแสดง ----------
   const firstYear = yearOf(rows[0]?.date ?? today)
@@ -162,7 +172,7 @@ export function DashboardPage({
   }
   const viewRows = windowYears === null ? rows : rows.filter(inRange)
   const viewNoPrepay =
-    windowYears === null ? selected.noPrepay.rows : selected.noPrepay.rows.filter(inRange)
+    windowYears === null ? selected.noPrepayRows : selected.noPrepayRows.filter(inRange)
   const viewTax =
     windowYears === null
       ? taxYears
@@ -178,7 +188,7 @@ export function DashboardPage({
   const cashPaid = rows
     .slice(0, currentIndex)
     .reduce((a, r) => (a + r.paymentFixed) as Fixed, ZERO)
-  const savedPeriods = selected.noPrepay.rows.length - rows.length
+  const savedPeriods = selected.noPrepayRows.length - rows.length
   const payoff = rows[rows.length - 1]
 
   return (
@@ -284,19 +294,33 @@ export function DashboardPage({
         <Line k={`จ่ายไปแล้ว ${currentIndex} งวด`} v={bahtRounded(cashPaid)} />
         <Line k="หายไปกับดอกเบี้ย" v={bahtRounded(interestPaid)} tone="interest" />
         <Line k="กลายเป็นของเราแล้ว" v={bahtRounded(principalPaid)} tone="principal" />
-        <Line
-          k="ปิดหนี้"
-          v={payoff ? formatThaiDate(payoff.date, 'monthYear') : '—'}
-          /* ⚠️ แผนฐานที่ชนเพดานจำนวนงวด = จ่ายตามสัญญาแล้วไม่มีวันปิดหนี้
-             เอาผลต่างมาบอกว่า "เร็วขึ้น 73 ปี" คือเทียบกับเพดาน ไม่ใช่กับความจริง */
-          sub={
-            !selected.noPrepay.paidOff
-              ? 'จ่ายตามสัญญาอย่างเดียวไม่มีวันปิดหนี้'
-              : savedPeriods > 0
-                ? `เร็วขึ้น ${formatDuration(savedPeriods)}`
-                : 'ตามแผน'
-          }
-        />
+        {selected.isClosed ? (
+          /* ⛔ ห้ามใช้คำว่า "ปิดหนี้" กับสัญญาที่รีไฟแนนซ์ออกไป หนี้ยังอยู่ แค่ย้ายแบงก์
+             และห้ามบอก "เร็วขึ้นกี่ปี" เพราะตารางฝั่งไหนก็จบที่วันปิดเหมือนกัน */
+          <Line
+            k="ปิดสัญญา"
+            v={
+              selected.closedDate !== null
+                ? formatThaiDate(selected.closedDate, 'long')
+                : 'ไม่ได้ระบุวันปิด'
+            }
+            sub={`อยู่กับสัญญานี้ ${rows.length} จาก ${selected.item.termMonths} งวด`}
+          />
+        ) : (
+          <Line
+            k="ปิดหนี้"
+            v={payoff ? formatThaiDate(payoff.date, 'monthYear') : '—'}
+            /* ⚠️ แผนฐานที่ชนเพดานจำนวนงวด = จ่ายตามสัญญาแล้วไม่มีวันปิดหนี้
+               เอาผลต่างมาบอกว่า "เร็วขึ้น 73 ปี" คือเทียบกับเพดาน ไม่ใช่กับความจริง */
+            sub={
+              !selected.noPrepay.paidOff
+                ? 'จ่ายตามสัญญาอย่างเดียวไม่มีวันปิดหนี้'
+                : savedPeriods > 0
+                  ? `เร็วขึ้น ${formatDuration(savedPeriods)}`
+                  : 'ตามแผน'
+            }
+          />
+        )}
       </section>
 
       {/* ---------- สิทธิลดหย่อนภาษี ---------- */}

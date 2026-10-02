@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { buildSchedule } from '@engine/schedule.js'
 import { makeTerms, fixedStep } from '@engine/test-helpers.js'
 import { isoDate } from '@engine/date.js'
+import { baht } from '@engine/money.js'
 import { rowsUntilClose, validateClose } from './closing'
 
 const TERMS = makeTerms({
@@ -101,5 +102,34 @@ describe('TV-53 เงื่อนไขก่อนปิด', () => {
     expect(errs[0]).toContain('2 รายการ')
     // รายการแรกตามเวลา ไม่ใช่ตามลำดับที่ส่งเข้ามา
     expect(errs[0]).toContain('มกราคม 2570')
+  })
+})
+
+/**
+ * ⛔ บั๊กที่เคยเกิด: ตารางจริงถูกตัดที่วันปิด แต่ตาราง "ถ้าไม่โปะ" ไม่ถูกตัด
+ *    Dashboard จึงเอา 18 งวดไปลบกับ 360 งวด แล้วสรุปว่า "โปะจนเร็วขึ้น 28 ปี"
+ *    ทั้งที่หนี้ที่เหลือแค่ย้ายไปสัญญาใหม่ ไม่ได้หายไปเพราะการโปะ
+ */
+describe('TV-53 ตารางฐานต้องถูกตัดที่วันเดียวกับตารางจริง', () => {
+  const closeAt = isoDate('2027-09-05')
+  const actual = buildSchedule(TERMS, [
+    { date: isoDate('2026-06-05'), amountSatang: baht(1_000_000), kind: 'partial_prepay' },
+  ]).rows
+
+  it('ตั้งต้น: โปะแล้วตารางจริงสั้นกว่าตารางฐานมาก — นี่คือที่มาของตัวเลขที่ผิด', () => {
+    expect(ROWS.length - actual.length).toBeGreaterThan(50)
+  })
+
+  it('ตัดทั้งสองฝั่งที่วันปิดแล้ว ผลต่างจำนวนงวดต้องเป็น 0', () => {
+    const a = rowsUntilClose(actual, closeAt)
+    const b = rowsUntilClose(ROWS, closeAt)
+    expect(a.length).toBe(b.length)
+    expect(a.length).toBeGreaterThan(0)
+  })
+
+  it('แต่ยอดคงเหลือยังต่างกัน — การโปะช่วยจริงในช่วงที่สัญญายังอยู่', () => {
+    const a = rowsUntilClose(actual, closeAt)
+    const b = rowsUntilClose(ROWS, closeAt)
+    expect(a[a.length - 1]!.balanceAfterFixed).toBeLessThan(b[b.length - 1]!.balanceAfterFixed)
   })
 })
