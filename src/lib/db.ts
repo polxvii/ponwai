@@ -23,6 +23,7 @@ import type {
 import type { DayCountBasis } from '@engine/accrual.js'
 import type { PrepayPlan } from '@engine/prepay.js'
 import type { StatementEntry } from '@engine/reconcile.js'
+import type { ClosingReason } from './closing'
 import type { RoundingMode } from '@engine/money.js'
 
 const sat = (n: number | null | undefined): Satang => BigInt(Math.round(n ?? 0)) as Satang
@@ -67,6 +68,11 @@ export type LoanListItem = {
   installmentSatang: Satang
   status: 'active' | 'closed'
   origin: 'new_purchase' | 'refinance' | 'retention'
+  /** null = ยังผ่อนอยู่ — ถ้าไม่ null ทั้งแอพต้องตัดตารางที่วันนี้ (ดู rowsUntilClose) */
+  closedDate: ISODate | null
+  closingReason: ClosingReason | null
+  /** สัญญาเก่าที่สัญญานี้มาแทน — ชี้ย้อนหลังเสมอ ปลายทางคือสัญญาที่ปิดไปแล้ว */
+  supersedesLoanId: string | null
 }
 
 type LoanRow = {
@@ -84,6 +90,9 @@ type LoanRow = {
   prepay_mode: 'shorten_term' | 'reduce_installment'
   status: 'active' | 'closed'
   origin: 'new_purchase' | 'refinance' | 'retention'
+  closed_date: string | null
+  closing_reason: ClosingReason | null
+  supersedes_loan_id: string | null
   offer_id: string | null
 }
 
@@ -96,7 +105,7 @@ export async function listLoans(): Promise<LoanListItem[]> {
       .from('active_loans')
       .select(
         'id, property_id, contract_date, first_due_date, term_months, disbursed_amount_satang,' +
-          ' installment_satang, status, origin,' +
+          ' installment_satang, status, origin, closed_date, closing_reason, supersedes_loan_id,' +
           ' properties(id, name), loan_offers(bank_code, bank_name)',
       )
       .order('contract_date', { ascending: false }),
@@ -115,6 +124,9 @@ export async function listLoans(): Promise<LoanListItem[]> {
     installmentSatang: sat(r.installment_satang),
     status: r.status!,
     origin: r.origin!,
+    closedDate: r.closed_date ? isoDate(r.closed_date) : null,
+    closingReason: r.closing_reason ?? null,
+    supersedesLoanId: r.supersedes_loan_id ?? null,
   }))
 }
 
@@ -403,6 +415,87 @@ export async function deleteLoan(loanId: string): Promise<void> {
     const drop = await supabase.from('properties').delete().eq('id', propertyId)
     if (drop.error) throw new Error(translateDbError(drop.error))
   }
+}
+
+// ---------- ปิด / เปิดสัญญาใหม่ ----------
+
+export type CloseLoanInput = {
+  closedDate: ISODate
+  reason: ClosingReason
+  /**
+   * สัญญาใหม่ที่มารับช่วงต่อ — จะถูกตั้ง supersedes_loan_id ให้ชี้กลับมาที่สัญญาที่ปิด
+   * null = ยังไม่มี/ไม่ผูก (เช่น ปิดเพราะผ่อนหมด หรือยังไม่ได้กรอกสัญญาใหม่)
+   */
+  supersededByLoanId: string | null
+}
+
+/**
+ * ปิดสัญญา — เขียนแค่ป้ายสถานะ ไม่แตะข้อมูลอื่น (ดูเหตุผลที่หัวไฟล์ closing.ts)
+ *
+ * ⛔ ห้ามแก้ origin ของสัญญาใหม่เป็น 'refinance' ตรงนี้
+ *    ค่าเดิมของมันไม่ได้ถูกเก็บไว้ที่ไหน reopenLoan จึงคืนค่าเดิมไม่ได้
+ *    ลิงก์ supersedes_loan_id บอกความจริงเรื่องโซ่รีไฟแนนซ์ครบอยู่แล้ว
+ *
+ * ⚠️ PostgREST ไม่มี transaction ข้าม request จึงผูกลิงก์ก่อนแล้วค่อยปิด
+ *    ถ้าพังที่ขั้นผูกลิงก์ สัญญาเก่ายังเป็น active เหมือนเดิม ไม่มีสถานะครึ่ง ๆ กลาง ๆ
+ *    ถ้าพังที่ขั้นปิด จะเหลือลิงก์ค้างบนสัญญาที่ยังผ่อนอยู่ ซึ่งไม่ทำให้ตัวเลขไหนเพี้ยน
+ *    และกดปิดซ้ำได้เลยเพราะเขียนทับค่าเดิม
+ */
+export async function closeLoan(loanId: string, input: CloseLoanInput): Promise<void> {
+  if (input.supersededByLoanId === loanId) {
+    throw new Error('สัญญาแทนตัวเองไม่ได้')
+  }
+
+  if (input.supersededByLoanId !== null) {
+    must(
+      await supabase
+        .from('active_loans')
+        .update({ supersedes_loan_id: loanId })
+        .eq('id', input.supersededByLoanId)
+        .select('id'),
+    )
+  }
+
+  // ⛔ ต้องเช็คว่าโดนจริงกี่แถว PostgREST ตอบ [] เมื่อไม่มีแถวตรงเงื่อนไข ไม่ใช่ error
+  //    ถ้าไม่เช็ค การปิดสัญญาที่ถูกลบไปแล้วจะ "สำเร็จ" เงียบ ๆ แล้วหน้าจอรีโหลดมาเหมือนเดิม
+  const hit = must(
+    await supabase
+      .from('active_loans')
+      .update({
+        status: 'closed',
+        closed_date: input.closedDate,
+        closing_reason: input.reason,
+      })
+      .eq('id', loanId)
+      .select('id'),
+  ) as unknown[]
+  if (hit.length === 0) throw new Error('ไม่พบสัญญานี้แล้ว — ลองโหลดหน้าใหม่')
+}
+
+/**
+ * กดปิดผิด — เปิดกลับมาผ่อนต่อ
+ *
+ * ⚠️ ต้องล้างลิงก์ของสัญญาที่มารับช่วงต่อด้วย ไม่งั้นเหลือ "สัญญาใหม่แทนสัญญาที่ยังผ่อนอยู่"
+ *    ซึ่งอ่านไม่ออกว่าตกลงหลังไหนยังมีหนี้
+ * ⚠️ ล้างลิงก์ก่อนเปลี่ยนสถานะ ถ้าพังครึ่งทางจะยังเป็นสัญญาที่ปิดอยู่เหมือนเดิม กดซ้ำได้
+ */
+export async function reopenLoan(loanId: string): Promise<void> {
+  must(
+    await supabase
+      .from('active_loans')
+      .update({ supersedes_loan_id: null })
+      .eq('supersedes_loan_id', loanId)
+      .select('id'),
+  )
+
+  const hit = must(
+    await supabase
+      .from('active_loans')
+      .update({ status: 'active', closed_date: null, closing_reason: null })
+      .eq('id', loanId)
+      .select('id'),
+  ) as unknown[]
+  if (hit.length === 0) throw new Error('ไม่พบสัญญานี้แล้ว — ลองโหลดหน้าใหม่')
 }
 
 // ---------- อ่านสัญญาเต็ม ----------

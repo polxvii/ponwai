@@ -20,6 +20,7 @@ import { TAX_DEDUCTION_CAP_SATANG } from '@engine/grouping.js'
 import type { ISODate } from '@engine/date.js'
 import { formatThaiDate, formatAccrualRange } from './format'
 import { prepayOfRow } from './progress'
+import type { ClosingReason } from './closing'
 import type { StoredPayment } from './db'
 
 const C = {
@@ -153,6 +154,19 @@ export type ReportInput = {
   /** จำนวนงวดที่ถือว่าจ่ายจริงไปแล้ว ใช้แยกอดีตออกจากประมาณการ */
   settled: number
   today: ISODate
+  /**
+   * สัญญาที่ปิดไปแล้ว — null/ไม่ส่ง = ยังผ่อนอยู่
+   *
+   * ⚠️ rows ที่ส่งมาต้องถูกตัดที่วันปิดมาแล้ว (rowsUntilClose) รายงานไม่ตัดให้เอง
+   *    ฟิลด์นี้มีไว้เปลี่ยนคำอธิบาย ไม่ใช่เปลี่ยนตัวเลข — ถ้ารายงานตัดเองจะมีสองที่
+   *    ที่ตัดสินใจเรื่องเดียวกัน แล้วตัวเลขบนจอกับในไฟล์จะหลุดจากกันเมื่อแก้ที่เดียว
+   */
+  closed?: { date: ISODate; reason: ClosingReason | null } | null
+}
+
+const CLOSED_NOTE: Record<ClosingReason, string> = {
+  refinanced: 'รีไฟแนนซ์ไปสัญญาใหม่',
+  paid_off: 'ผ่อนหมด / ปิดยอดเอง',
 }
 
 const KIND: Record<string, string> = {
@@ -172,12 +186,21 @@ export function loanReportHtml(x: ReportInput): string {
     done[done.length - 1]?.balanceAfterFixed ?? ((x.disbursedSatang * FIXED_SCALE) as Fixed)
   const payoff = x.rows[x.rows.length - 1]
 
+  const closed = x.closed ?? null
   const cards: readonly (readonly [string, string, string])[] = [
-    ['ยังเป็นหนี้อยู่', b0(balance), `ณ งวดที่ ${x.settled} จาก ${x.rows.length}`],
+    closed !== null
+      ? ['ยอดที่เหลือตอนปิด', b0(balance), `ปิดที่งวดที่ ${x.settled}`]
+      : ['ยังเป็นหนี้อยู่', b0(balance), `ณ งวดที่ ${x.settled} จาก ${x.rows.length}`],
     ['จ่ายไปแล้ว', b0(paidTotal), `${x.settled} งวด`],
     ['หายไปกับดอกเบี้ย', b0(paidInterest), 'ส่วนที่ไม่ได้ลดหนี้'],
     ['กลายเป็นของเราแล้ว', b0(paidPrincipal), 'เงินต้นที่ตัดไปแล้ว'],
-    ['ปิดหนี้', payoff ? formatThaiDate(payoff.date, 'monthYear') : '—', 'ตามแผนปัจจุบัน'],
+    closed !== null
+      ? [
+          'ปิดสัญญา',
+          formatThaiDate(closed.date, 'short'),
+          closed.reason !== null ? CLOSED_NOTE[closed.reason] : 'ปิดแล้ว',
+        ]
+      : ['ปิดหนี้', payoff ? formatThaiDate(payoff.date, 'monthYear') : '—', 'ตามแผนปัจจุบัน'],
   ]
 
   const yearTable = (gs: readonly YearGroup[]): readonly (readonly string[])[] =>
@@ -290,7 +313,11 @@ export function loanReportHtml(x: ReportInput): string {
 </head>
 <body><div class="wrap">
   <h1>${esc(x.propertyName)}</h1>
-  <p class="sub">${esc(x.bankLabel)} · ทำสัญญา ${formatThaiDate(x.contractDate, 'long')} · วงเงิน ${s2(x.disbursedSatang)} · ค่างวดตามสัญญา ${s2(x.installmentSatang)}</p>
+  <p class="sub">${esc(x.bankLabel)} · ทำสัญญา ${formatThaiDate(x.contractDate, 'long')} · วงเงิน ${s2(x.disbursedSatang)} · ค่างวดตามสัญญา ${s2(x.installmentSatang)}${
+    closed !== null
+      ? ` · <b>ปิดสัญญาแล้ว ${formatThaiDate(closed.date, 'long')}</b> — ตัวเลขทั้งฉบับหยุดอยู่ที่วันนี้`
+      : ''
+  }</p>
 
   <div class="cards">${cardsHtml}</div>
 
@@ -330,7 +357,11 @@ export function loanReportHtml(x: ReportInput): string {
 
   <footer>
     สร้างจาก PonWai เมื่อ ${formatThaiDate(x.today, 'long')} ·
-    งวดที่ ${x.settled + 1} เป็นต้นไปเป็นประมาณการจากค่างวดตามสัญญาและแผนโปะที่บันทึกไว้ ไม่ใช่ยอดที่จ่ายจริง ·
+    ${
+      closed !== null
+        ? 'สัญญานี้ปิดไปแล้ว ทุกงวดในรายงานเกิดขึ้นจริง ไม่มีงวดประมาณการ'
+        : `งวดที่ ${x.settled + 1} เป็นต้นไปเป็นประมาณการจากค่างวดตามสัญญาและแผนโปะที่บันทึกไว้ ไม่ใช่ยอดที่จ่ายจริง`
+    } ·
     ดอกเบี้ยคิดรายวันในช่วง (วันตัดงวดก่อน, วันตัดงวดนี้] โดยรวมวันตัดด้วย
   </footer>
 </div></body>

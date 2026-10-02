@@ -22,11 +22,15 @@ import {
 import { downloadCsv, paymentsCsv, reportName, scheduleCsv, yearSummaryCsv } from '@/lib/export'
 import { downloadHtml, loanReportHtml } from '@/lib/report'
 import {
-  addPayment, getLoanFull, getMarginalTaxRateBps, getPlan, removePayment,
-  setScheduleOverride, toLoanTerms,
+  addPayment, closeLoan, getLoanFull, getMarginalTaxRateBps, getPlan, removePayment,
+  reopenLoan, setScheduleOverride, toLoanTerms,
   toPaymentEvents, updatePayment,
   type LoanFull, type LoanListItem, type StoredPayment,
 } from '@/lib/db'
+import {
+  CLOSING_REASONS, CLOSING_REASON_LABELS, rowsUntilClose, validateClose,
+  type ClosingReason,
+} from '@/lib/closing'
 import type { PrepayPlan } from '@engine/prepay.js'
 import { isoDate } from '@engine/date.js'
 import { todayISO } from './model'
@@ -41,9 +45,16 @@ export function LoanDetail({
   onPlanPrepay,
   onReconcile,
   onEdit,
+  onClosedChanged,
   otherLoans = [],
+  allLoans = [],
 }: {
   item: LoanListItem
+  /**
+   * สัญญาทั้งหมดของคนเดียวกัน ใช้ผูกโซ่รีไฟแนนซ์ตอนปิดสัญญา
+   * และใช้บอกว่าสัญญาที่ปิดไปแล้วถูกแทนด้วยหลังไหน
+   */
+  allLoans?: readonly LoanListItem[]
   /**
    * สัญญาอื่นของคนเดียวกัน ใช้คิดเพดานลดหย่อนร่วมในรายงานที่ส่งออก
    * ⛔ เพดาน 100,000 เป็นของ "คน" ไม่ใช่ของ "สัญญา" (ข้อ 1.9)
@@ -54,6 +65,8 @@ export function LoanDetail({
   onReconcile: () => void
   /** ส่งสัญญาที่โหลดมาแล้วกลับไป จะได้ไม่ต้องยิงซ้ำเพื่อเติมฟอร์ม */
   onEdit: (full: LoanFull) => void
+  /** ปิด/เปิดสัญญาแล้ว ต้องให้หน้าแม่โหลดรายการใหม่ ไม่งั้น item ที่ถืออยู่ยังเป็นของเก่า */
+  onClosedChanged: () => void
 }) {
   const [full, setFull] = useState<LoanFull | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -61,6 +74,8 @@ export function LoanDetail({
   const [prepayPlan, setPrepayPlan] = useState<PrepayPlan | null>(null)
   const [axis, setAxis] = useState<GroupAxis>('contract_year')
   const [reloadKey, setReloadKey] = useState(0)
+  /** เปิดแผงยืนยันปิดสัญญาอยู่หรือไม่ — ปิดสัญญาเป็นงานที่ต้องเห็นผลลัพธ์ก่อนกด */
+  const [closeOpen, setCloseOpen] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -132,7 +147,25 @@ export function LoanDetail({
   }
 
   const { actual, plan, events, terms } = computed
-  const rows = actual.rows
+
+  const isClosed = item.status === 'closed'
+  /**
+   * null = ยังผ่อนอยู่ หรือปิดแล้วแต่ไม่มีวันปิดบันทึกไว้
+   *
+   * ⚠️ แยกจาก isClosed โดยตั้งใจ — ปุ่ม "เปิดสัญญากลับมา" ต้องขึ้นจาก status เท่านั้น
+   *    ถ้าผูกกับวันปิด สัญญาที่ status = closed แต่ closed_date หายไป (แก้มือใน DB)
+   *    จะกลายเป็นสัญญาที่เปิดกลับไม่ได้เลย ไม่มีทางออกนอกจากลบทิ้งทั้งประวัติ
+   */
+  const closedDate = isClosed ? item.closedDate : null
+  /**
+   * ⛔ งวดหลังวันปิดไม่เกิดขึ้นจริง ต้องตัดก่อนเอาไปคิดสรุปรายปี สรุปภาษี และรายงาน
+   *    ไม่งั้นสัญญาที่รีไฟแนนซ์ไปแล้วจะยังกินเพดานลดหย่อนของปีหน้าอยู่
+   */
+  const rows = rowsUntilClose(actual.rows, closedDate)
+  /** "ตอนนี้" ของสัญญานี้ — สัญญาที่ปิดแล้วหยุดอยู่ที่วันปิด ไม่เดินต่อถึงวันนี้ */
+  const asOf = closedDate ?? today
+  /** สัญญาใหม่ที่มารับช่วงต่อ — ลิงก์เก็บไว้ฝั่งสัญญาใหม่ ต้องหาย้อนกลับมา */
+  const supersededBy = allLoans.find((l) => l.supersedesLoanId === item.loanId) ?? null
 
   /**
    * ค่างวดตามสัญญาของงวดที่วันนั้นตกอยู่
@@ -148,8 +181,8 @@ export function LoanDetail({
     return Number(findInstallment(terms.installmentSteps, hit?.index ?? 1, terms.installmentSatang)) / 100
   }
   // นับจาก "จ่ายจริงไปแล้วหรือยัง" ด้วย ไม่ใช่รอวันครบกำหนดอย่างเดียว
-  const paidPeriods = settledPeriods(rows, events, today)
-  const balanceNow = balanceOn(rows, events, today, item.disbursedSatang)
+  const paidPeriods = settledPeriods(rows, events, asOf)
+  const balanceNow = balanceOn(rows, events, asOf, item.disbursedSatang)
   const interestPaid = rows
     .slice(0, paidPeriods)
     .reduce((a, r) => (a + r.interestPaidFixed) as Fixed, 0n as Fixed)
@@ -179,6 +212,16 @@ export function LoanDetail({
         </div>
       </header>
 
+      {isClosed && (
+        <ClosedBanner
+          closedDate={item.closedDate}
+          reason={item.closingReason}
+          supersededBy={supersededBy}
+          onReopened={onClosedChanged}
+          loanId={item.loanId}
+        />
+      )}
+
       {full.conventionAssumed && (
         <p className="mb-4 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
           ⚠️ วิธีนับวันและการปัดเศษยังเป็นค่าสมมติ ตัวเลขอาจต่างจากใบแจ้งยอดเล็กน้อย —
@@ -190,7 +233,8 @@ export function LoanDetail({
           ไม่ใช่สัญญาจริง — ธนาคารเขียนสัญญาแบบนั้นไม่ได้
           ต้องเตือนที่หน้าสัญญา ไม่ใช่ให้ไปเจอตอนวางแผนโปะ
           และต้องบอกว่าไปตรวจช่องไหน ไม่ใช่แค่บอกว่าผิด */}
-      {!plan.paidOff && (
+      {/* สัญญาที่ปิดไปแล้วไม่ต้องเตือนเรื่องอนาคตที่ไม่มีวันมาถึง */}
+      {!plan.paidOff && !isClosed && (
         <p className="mb-4 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
           ⚠️ ค่างวดที่กรอกไว้ไม่พอจ่ายดอกเบี้ยหลังพ้นโปร จ่ายตามนี้อย่างเดียวหนี้จะไม่มีวันหมด
           {contractAtTerm && (
@@ -215,7 +259,9 @@ export function LoanDetail({
 
       {/* ---------- สรุป ---------- */}
       <section className="rounded-lg bg-[var(--color-panel)] p-5 text-[var(--color-panel-ink)]">
-        <p className="text-meta text-[var(--color-panel-ink-2)]">ยอดคงเหลือวันนี้</p>
+        <p className="text-meta text-[var(--color-panel-ink-2)]">
+          {isClosed ? 'ยอดที่เหลือตอนปิดสัญญา' : 'ยอดคงเหลือวันนี้'}
+        </p>
         <p className="mt-1 num text-hero">{bahtRounded(balanceNow)}</p>
 
         <SplitBar
@@ -226,7 +272,9 @@ export function LoanDetail({
           onPanel
         />
         <p className="mt-1 text-micro text-[var(--color-panel-ink-3)]">
-          เป็นของเราแล้ว {bahtRounded(principalPaid)} · ยังเป็นหนี้ {bahtRounded(balanceNow)}
+          {isClosed
+            ? `ตัดเงินต้นไปได้เอง ${bahtRounded(principalPaid)} · ปิดยอดที่เหลือ ${bahtRounded(balanceNow)}`
+            : `เป็นของเราแล้ว ${bahtRounded(principalPaid)} · ยังเป็นหนี้ ${bahtRounded(balanceNow)}`}
         </p>
 
         <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-1 text-meta sm:grid-cols-3">
@@ -234,34 +282,55 @@ export function LoanDetail({
           <PanelRow k="ดอกเบี้ยที่จ่ายไป" v={bahtRounded(interestPaid)} />
           {/* ค่างวดของงวดที่กำลังจะถึง ไม่ใช่ค่างวดตั้งต้นของสัญญา
               สัญญาที่ค่างวดต่างกันตามช่วง ค่าตั้งต้นจะเป็นของปีแรกตลอดไป ซึ่งผิดตั้งแต่พ้นโปร */}
-          <PanelRow k="ค่างวดงวดถัดไป" v={baht(installmentNext, 0)} />
+          {!isClosed && <PanelRow k="ค่างวดงวดถัดไป" v={baht(installmentNext, 0)} />}
           <PanelRow
-            k="ปิดหนี้"
-            v={payoff ? formatThaiDate(payoff.date, 'monthYear') : '—'}
-          />
-          <PanelRow k="ผ่อนทั้งหมด" v={formatDuration(rows.length)} />
-          <PanelRow
-            k="เทียบกับจ่ายตามสัญญา"
-            /* ⚠️ แผนฐานชนเพดานจำนวนงวด = จ่ายตามสัญญาแล้วไม่มีวันปิดหนี้
-               ผลต่างจะกลายเป็น "เร็วขึ้น 73 ปี" ซึ่งเทียบกับเพดาน ไม่ใช่กับความจริง */
+            k={isClosed ? 'วันปิดสัญญา' : 'ปิดหนี้'}
             v={
-              !plan.paidOff
-                ? 'จ่ายตามสัญญาอย่างเดียวไม่มีวันปิดหนี้'
-                : savedPeriods > 0
-                  ? `เร็วขึ้น ${formatDuration(savedPeriods)}`
-                  : 'ตามแผน'
+              isClosed
+                ? closedDate !== null
+                  ? formatThaiDate(closedDate, 'long')
+                  : 'ไม่ได้ระบุ'
+                : payoff
+                  ? formatThaiDate(payoff.date, 'monthYear')
+                  : '—'
             }
           />
+          <PanelRow k="ผ่อนทั้งหมด" v={formatDuration(rows.length)} />
+          {isClosed ? (
+            /* เทียบกับอายุสัญญาที่เซ็นไว้ ไม่ใช่กับแผนฐาน — คนที่รีไฟแนนซ์อยากรู้ว่า
+               อยู่กับแบงก์เก่าไปกี่งวดจากกี่งวด ไม่ใช่ว่า "เร็วกว่าแผน" ซึ่งไม่จริง
+               เพราะหนี้ที่เหลือถูกย้ายไปสัญญาใหม่ ไม่ได้หายไป */
+            <PanelRow
+              k="จากอายุสัญญา"
+              v={`${rows.length} จาก ${item.termMonths} งวด`}
+            />
+          ) : (
+            <PanelRow
+              k="เทียบกับจ่ายตามสัญญา"
+              /* ⚠️ แผนฐานชนเพดานจำนวนงวด = จ่ายตามสัญญาแล้วไม่มีวันปิดหนี้
+                 ผลต่างจะกลายเป็น "เร็วขึ้น 73 ปี" ซึ่งเทียบกับเพดาน ไม่ใช่กับความจริง */
+              v={
+                !plan.paidOff
+                  ? 'จ่ายตามสัญญาอย่างเดียวไม่มีวันปิดหนี้'
+                  : savedPeriods > 0
+                    ? `เร็วขึ้น ${formatDuration(savedPeriods)}`
+                    : 'ตามแผน'
+              }
+            />
+          )}
         </dl>
       </section>
 
       <div className="mt-6 flex flex-wrap gap-3">
-        <button
-          onClick={onPlanPrepay}
-          className="tap rounded-md bg-[var(--color-principal)] px-4 py-2.5 text-[var(--color-ink)]"
-        >
-          วางแผนโปะ →
-        </button>
+        {/* วางแผนโปะสัญญาที่ปิดไปแล้วไม่มีความหมาย — ไม่เหลืออะไรให้โปะ */}
+        {!isClosed && (
+          <button
+            onClick={onPlanPrepay}
+            className="tap rounded-md bg-[var(--color-principal)] px-4 py-2.5 text-[var(--color-ink)]"
+          >
+            วางแผนโปะ →
+          </button>
+        )}
         <button
           onClick={onReconcile}
           className="tap rounded-md border border-[var(--color-rule)] px-4 py-2.5"
@@ -299,6 +368,10 @@ export function LoanDetail({
                   toFixed(findInstallment(terms.installmentSteps, period, terms.installmentSatang)),
                 settled: paidPeriods,
                 today,
+                closed:
+                  closedDate !== null
+                    ? { date: closedDate, reason: item.closingReason }
+                    : null,
               }),
             )
           }
@@ -338,7 +411,31 @@ export function LoanDetail({
             บันทึกการจ่าย (CSV)
           </button>
         )}
+        {!isClosed && (
+          <button
+            onClick={() => setCloseOpen((v) => !v)}
+            className="tap rounded-md border border-[var(--color-rule)] px-4 py-2.5 text-[var(--color-ink-2)] hover:text-[var(--color-warn)]"
+          >
+            ปิดสัญญา
+          </button>
+        )}
       </div>
+
+      {closeOpen && !isClosed && (
+        <CloseSection
+          item={item}
+          full={full}
+          rows={rows}
+          events={events}
+          today={today}
+          allLoans={allLoans}
+          onCancel={() => setCloseOpen(false)}
+          onClosed={() => {
+            setCloseOpen(false)
+            onClosedChanged()
+          }}
+        />
+      )}
 
       {/* ---------- การจ่าย ---------- */}
       <PaymentSection
@@ -414,6 +511,243 @@ function PanelRow({ k, v }: { k: string; v: string }) {
   return (
     <div>
       <dt className="text-[var(--color-panel-ink-2)]">{k}</dt>
+      <dd className="num">{v}</dd>
+    </div>
+  )
+}
+
+// ---------- ปิดสัญญา ----------
+
+/**
+ * ⛔ ปุ่ม "เปิดสัญญากลับมา" ต้องอยู่ตรงนี้เสมอ ไม่ใช่ซ่อนในเมนูแก้ไข
+ *    คนที่กดปิดผิดจะมาหาทางแก้ที่หน้านี้ก่อนเป็นอันดับแรก
+ *    ถ้าหาไม่เจอ ทางออกที่เหลือคือ "ลบแล้วกรอกใหม่" ซึ่งทำให้ประวัติการจ่ายหายทั้งหมด
+ */
+function ClosedBanner({
+  loanId,
+  closedDate,
+  reason,
+  supersededBy,
+  onReopened,
+}: {
+  loanId: string
+  /** null = ปิดแล้วแต่ไม่มีวันปิดบันทึกไว้ — ยังต้องเปิดกลับได้ */
+  closedDate: ISODate | null
+  reason: ClosingReason | null
+  supersededBy: LoanListItem | null
+  onReopened: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function reopen() {
+    setBusy(true)
+    setError(null)
+    try {
+      await reopenLoan(loanId)
+      onReopened()
+    } catch (e) {
+      setError((e as Error).message)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mb-4 rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-row">ปิดสัญญาแล้ว</p>
+          <p className="mt-1 text-meta text-[var(--color-ink-2)]">
+            {closedDate !== null ? formatThaiDate(closedDate, 'long') : 'ไม่ได้ระบุวันปิด'}
+            {reason !== null && ` · ${CLOSING_REASON_LABELS[reason]}`}
+            {supersededBy !== null &&
+              ` · ย้ายไป ${supersededBy.propertyName} (${supersededBy.bankLabel})`}
+          </p>
+          <p className="mt-1 text-micro text-[var(--color-ink-3)]">
+            ตัวเลขทั้งหน้าหยุดอยู่ที่วันปิด งวดหลังจากนั้นไม่ถูกนับในสรุปรายปีและสิทธิลดหย่อน —
+            รายการจ่าย แผนโปะ และประวัติทั้งหมดยังอยู่ครบ
+          </p>
+        </div>
+        <button
+          onClick={() => void reopen()}
+          disabled={busy}
+          className="tap shrink-0 rounded-md border border-[var(--color-rule)] px-4 py-2 text-meta disabled:opacity-50"
+        >
+          {busy ? 'กำลังเปิด…' : 'เปิดสัญญากลับมา'}
+        </button>
+      </div>
+      {error && <p className="mt-2 text-meta text-[var(--color-warn)]">{error}</p>}
+    </div>
+  )
+}
+
+/**
+ * แผงยืนยันปิดสัญญา
+ *
+ * ⛔ ห้ามทำเป็น confirm() บรรทัดเดียว ผลของการปิดคือตัวเลขทั้งหน้าเปลี่ยน
+ *    ผู้ใช้ต้องเห็นก่อนว่าปิดแล้วจะเหลืออะไร ไม่ใช่เห็นหลังกด
+ * ⚠️ วันปิดเลือกย้อนหลังได้ เพราะคนมักกรอกหลังรีไฟแนนซ์เสร็จไปแล้วหลายวัน
+ *    ตัวเลขสรุปจึงต้องคิดใหม่ตามวันที่เลือก ไม่ใช่ตามวันนี้
+ */
+function CloseSection({
+  item,
+  full,
+  rows,
+  events,
+  today,
+  allLoans,
+  onCancel,
+  onClosed,
+}: {
+  item: LoanListItem
+  full: LoanFull
+  rows: readonly ScheduleRow[]
+  events: readonly PaymentEvent[]
+  today: ISODate
+  allLoans: readonly LoanListItem[]
+  onCancel: () => void
+  onClosed: () => void
+}) {
+  const [closedDate, setClosedDate] = useState<ISODate>(today)
+  const [reason, setReason] = useState<ClosingReason>('refinanced')
+  /** ค่าว่าง = ไม่ผูกกับสัญญาไหน */
+  const [picked, setPicked] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  /**
+   * ⛔ สัญญาที่แทนสัญญาอื่นไปแล้วต้องไม่อยู่ในรายการ
+   *    supersedes_loan_id มีช่องเดียว ถ้าเลือกซ้ำจะทับลิงก์เดิมเงียบ ๆ
+   *    แล้วโซ่รีไฟแนนซ์ของสัญญาที่ปิดไปก่อนหน้าจะขาดโดยไม่มีใครรู้
+   */
+  const candidates = allLoans.filter(
+    (l) => l.status === 'active' && l.loanId !== item.loanId && l.supersedesLoanId === null,
+  )
+
+  const kept = rowsUntilClose(rows, closedDate)
+  const periods = settledPeriods(rows, events, closedDate)
+  const balanceAtClose = balanceOn(rows, events, closedDate, item.disbursedSatang)
+  const interestPaid = rows
+    .slice(0, periods)
+    .reduce((a, r) => (a + r.interestPaidFixed) as Fixed, 0n as Fixed)
+  const dropped = rows.length - kept.length
+
+  /** บันทึกยอดปิดบัญชีไว้แล้วหรือยัง — ถ้ายัง ดอกช่วงสุดท้ายจะขาดไปจากสิทธิลดหย่อนปีนี้ */
+  const hasRedemption = full.payments.some(
+    (p) => p.kind === 'full_redemption' && p.paidDate <= closedDate,
+  )
+
+  const errors = validateClose({
+    closedDate,
+    firstAccrualDate: isoDate(full.loan.first_accrual_date),
+    today,
+    payments: full.payments,
+  })
+
+  async function submit() {
+    setBusy(true)
+    setError(null)
+    try {
+      await closeLoan(item.loanId, {
+        closedDate,
+        reason,
+        supersededByLoanId: reason === 'refinanced' && picked !== '' ? picked : null,
+      })
+      onClosed()
+    } catch (e) {
+      setError((e as Error).message)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4">
+      <h2 className="text-row">ปิดสัญญานี้</h2>
+      <p className="mt-1 text-meta text-[var(--color-ink-2)]">
+        ปิดสัญญาไม่ใช่การลบ — ประวัติการจ่าย แผนโปะ และดอกเบี้ยที่ใช้ลดหย่อนไปแล้วยังอยู่ครบ
+        และกดเปิดกลับมาได้ทุกเมื่อ
+      </p>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Field label="วันที่ปิดสัญญา" hint={formatThaiDate(closedDate, 'long')}>
+          <DateField value={closedDate} onChange={(v) => setClosedDate(isoDate(v))} />
+        </Field>
+        <Field label="เหตุผล">
+          <SelectField value={reason} onChange={setReason} options={CLOSING_REASONS} />
+        </Field>
+        {reason === 'refinanced' && candidates.length > 0 && (
+          <Field
+            label="ย้ายไปสัญญาไหน"
+            hint="ผูกไว้เพื่อให้อ่านโซ่รีไฟแนนซ์ย้อนหลังได้ ไม่ผูกก็ปิดได้"
+          >
+            <SelectField
+              value={picked}
+              onChange={setPicked}
+              options={[
+                { value: '', label: 'ยังไม่ผูก / ยังไม่ได้กรอกสัญญาใหม่' },
+                ...candidates.map((l) => ({
+                  value: l.loanId,
+                  label: `${l.propertyName} · ${l.bankLabel}`,
+                })),
+              ]}
+            />
+          </Field>
+        )}
+      </div>
+
+      <dl className="mt-4 grid gap-x-6 gap-y-1 border-t border-[var(--color-rule)] pt-3 text-meta sm:grid-cols-2">
+        <SumRow k="ผ่อนไปแล้ว" v={`${periods} งวด จาก ${item.termMonths} งวดตามสัญญา`} />
+        <SumRow k="ดอกเบี้ยที่จ่ายไปทั้งหมด" v={bahtRounded(interestPaid)} />
+        <SumRow k="ยอดที่เหลือ ณ วันปิด" v={bahtRounded(balanceAtClose)} />
+        <SumRow
+          k="งวดที่จะไม่ถูกนับอีก"
+          v={dropped > 0 ? `${dropped} งวด (${formatDuration(dropped)})` : 'ไม่มี'}
+        />
+      </dl>
+
+      {/* ⚠️ ดอกช่วง "วันตัดงวดล่าสุด → วันปิด" เป็นดอกที่จ่ายจริงและใช้ลดหย่อนได้
+          แต่จะไม่มีงวดไหนรองรับถ้าไม่บันทึกยอดปิดบัญชี ต้องบอกตรงนี้
+          ไม่ใช่ให้ไปเจอตอนยื่นภาษีแล้วตัวเลขไม่ตรงหนังสือรับรองของธนาคาร */}
+      {balanceAtClose > 0n && !hasRedemption && (
+        <p className="mt-3 rounded-md bg-[var(--color-principal-tint)] px-3 py-2 text-meta">
+          ยังไม่ได้บันทึกยอดปิดบัญชี {bahtRounded(balanceAtClose)} เป็นรายการจ่าย — ปิดสัญญาได้เลย
+          แต่ถ้าอยากให้ดอกเบี้ยช่วงสุดท้าย (ตั้งแต่วันตัดงวดล่าสุดถึงวันปิด)
+          เข้าสรุปรายปีและสิทธิลดหย่อนของปีนี้ด้วย ให้บันทึกรายการจ่ายประเภท
+          &quot;ปิดบัญชี&quot; ที่หัวข้อด้านล่างก่อน
+        </p>
+      )}
+
+      {errors.map((e) => (
+        <p key={e} className="mt-2 text-meta text-[var(--color-warn)]">
+          {e}
+        </p>
+      ))}
+      {error && <p className="mt-2 text-meta text-[var(--color-warn)]">{error}</p>}
+
+      <div className="mt-4 flex items-center gap-3">
+        <button
+          onClick={() => void submit()}
+          disabled={busy || errors.length > 0}
+          className="tap rounded-md bg-[var(--color-interest)] px-4 py-2 text-[var(--color-panel-ink)] disabled:opacity-50"
+        >
+          {busy ? 'กำลังปิด…' : 'ยืนยันปิดสัญญา'}
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={busy}
+          className="tap text-meta text-[var(--color-ink-3)] hover:underline"
+        >
+          ยกเลิก
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function SumRow({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex justify-between gap-2">
+      <dt className="text-[var(--color-ink-2)]">{k}</dt>
       <dd className="num">{v}</dd>
     </div>
   )

@@ -13,8 +13,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { supabase } from './supabase'
 import {
-  addPayment, createLoan, deleteLoan, deleteScenario, getLoanFull, listLoans, listScenarios,
-  loadScenario, removePayment, saveScenario, toLoanTerms, toPaymentEvents,
+  addPayment, closeLoan, createLoan, deleteLoan, deleteScenario, getLoanFull, listLoans,
+  listScenarios, loadScenario, removePayment, reopenLoan, saveScenario, toLoanTerms,
+  toPaymentEvents,
 } from './db'
 
 function must<T>(res: { data: T | null; error: unknown }): T {
@@ -210,6 +211,32 @@ describe.skipIf(EMAIL === '' || PASSWORD === '')('db.ts กับ Supabase จ�
 
     await deleteScenario(scenarioId)
     expect(await listScenarios(loanId)).toHaveLength(0)
+  }, 30_000)
+
+  /**
+   * ⛔ status / closed_date / closing_reason / supersedes_loan_id ไม่เคยถูกเขียนจากโค้ดมาก่อน
+   *    คอลัมน์พวกนี้มี check constraint ติดอยู่ ถ้าค่าไม่ตรงจะพังที่ชั้น DB เป็นภาษาอังกฤษดิบ
+   *    เทสต์นี้จึงต้องยิงของจริง ไม่ใช่ mock
+   */
+  it('closeLoan ปิดสัญญาแล้ว reopenLoan เปิดกลับได้ครบทุกช่อง', async () => {
+    await closeLoan(loanId, {
+      closedDate: isoDate('2025-06-30'),
+      reason: 'refinanced',
+      supersededByLoanId: null,
+    })
+
+    const closed = (await listLoans()).find((i) => i.loanId === loanId)
+    expect(closed?.status).toBe('closed')
+    expect(closed?.closedDate).toBe('2025-06-30')
+    expect(closed?.closingReason).toBe('refinanced')
+
+    await reopenLoan(loanId)
+
+    const back = (await listLoans()).find((i) => i.loanId === loanId)
+    expect(back?.status).toBe('active')
+    // ⚠️ กดกลับแล้วต้องไม่เหลือร่องรอย ไม่งั้นการ์ดยังขึ้น "ปิดแล้ว 30 มิ.ย." ทั้งที่กลับมาผ่อนต่อ
+    expect(back?.closedDate).toBeNull()
+    expect(back?.closingReason).toBeNull()
   }, 30_000)
 
   it('deleteLoan ลบสัญญา ลูก และทรัพย์สินที่ไม่เหลือสัญญา', async () => {

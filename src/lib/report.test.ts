@@ -148,3 +148,25 @@ describe('TV-52 คอลัมน์โปะของงวดที่จ่�
     expect(rows[0]!.flags).toContain('actual_payment')
   })
 })
+
+describe('TV-53 รายงานของสัญญาที่ปิดไปแล้ว', () => {
+  const closed = { date: isoDate('2027-01-05'), reason: 'refinanced' as const }
+
+  it('บอกชัดว่าปิดแล้ววันไหน ไม่งั้นไฟล์ที่ส่งต่อไปอ่านเหมือนสัญญาที่ยังผ่อนอยู่', () => {
+    const html = report({ closed })
+    expect(html).toContain('ปิดสัญญาแล้ว')
+    expect(html).toContain('ปิดสัญญา')
+  })
+
+  /** ⛔ สัญญาที่ปิดแล้วไม่มีงวดในอนาคต บอกว่า "เป็นประมาณการ" คือโกหก */
+  it('ไม่มีประโยคงวดประมาณการ', () => {
+    expect(report({ closed })).not.toContain('เป็นต้นไปเป็นประมาณการ')
+    expect(report()).toContain('เป็นต้นไปเป็นประมาณการ')
+  })
+
+  it('ยังต้องปลอดภัยเหมือนเดิม ไม่มีลิงก์ภายนอกโผล่มาเพราะกิ่งใหม่', () => {
+    const html = report({ closed })
+    expect(html).not.toMatch(/https?:\/\//)
+    expect(html).not.toMatch(/<(link|script|img)\b/)
+  })
+})

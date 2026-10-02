@@ -26,6 +26,7 @@ import { toLoanTerms, toPaymentEvents, type LoanFull, type LoanListItem } from '
 import type { PrepayPlan } from '@engine/prepay.js'
 import { BalanceChart, TaxChart, YearBarsChart } from './charts'
 import { balanceOn, settledPeriods } from '@/lib/progress'
+import { rowsUntilClose } from '@/lib/closing'
 
 export type LoanBundle = { item: LoanListItem; full: LoanFull; plan: PrepayPlan | null }
 
@@ -59,7 +60,11 @@ export function DashboardPage({
   today: ISODate
   onOpenLoan: (item: LoanListItem) => void
 }) {
-  const [selectedId, setSelectedId] = useState<string>(() => bundles[0]?.item.loanId ?? '')
+  /** เปิดมาต้องเจอหลังที่ยังผ่อนอยู่ก่อน ไม่ใช่สัญญาเก่าที่ปิดไปแล้ว */
+  const [selectedId, setSelectedId] = useState<string>(
+    () =>
+      (bundles.find((b) => b.item.status === 'active') ?? bundles[0])?.item.loanId ?? '',
+  )
   const [axis, setAxis] = useState<GroupAxis>('contract_year')
   const [windowYears, setWindowYears] = useState<number | null>(5)
   /** หน้าต่างเริ่มที่ปีไหน — null = ตามปีปัจจุบัน ไม่ใช่ปีแรกของสัญญา */
@@ -70,23 +75,38 @@ export function DashboardPage({
       bundles.map((b) => {
         const terms = toLoanTerms(b.full)
         const events = toPaymentEvents(b.full)
+        // ⚠️ ต้องใส่แผนโปะด้วย ไม่งั้นการ์ด "ปิดหนี้ ... ตามแผน" บอกคนละวันกับ
+        //    ตารางผ่อนในหน้ารายละเอียด ทั้งที่เป็นสัญญาเดียวกัน
+        const actual = buildSchedule(terms, events, b.plan ?? undefined)
+        const isClosed = b.item.status === 'closed'
+        // ⚠️ closedDate ใช้ตัดตาราง ส่วน isClosed ใช้ตัดสินว่านับเข้าหนี้รวมไหม
+        //    แยกกันเพราะสัญญาที่ปิดแล้วแต่ไม่มีวันปิด ต้องไม่ถูกนับเป็นหนี้ที่ยังผ่อนอยู่
+        const closedDate = isClosed ? b.item.closedDate : null
         return {
           ...b,
           events,
-          // ⚠️ ต้องใส่แผนโปะด้วย ไม่งั้นการ์ด "ปิดหนี้ ... ตามแผน" บอกคนละวันกับ
-          //    ตารางผ่อนในหน้ารายละเอียด ทั้งที่เป็นสัญญาเดียวกัน
-          actual: buildSchedule(terms, events, b.plan ?? undefined),
+          isClosed,
+          closedDate,
+          /** "ตอนนี้" ของสัญญานี้ — สัญญาที่ปิดแล้วหยุดที่วันปิด ไม่เดินต่อถึงวันนี้ */
+          asOf: closedDate ?? today,
+          /**
+           * ⛔ สัญญาที่ปิดแล้วต้องตัดงวดหลังวันปิดทิ้งก่อนเอาไปคิดอะไรทั้งสิ้น
+           *    ไม่งั้นสัญญาที่รีไฟแนนซ์ออกไปแล้วยังกินเพดานลดหย่อนของปีหน้าอยู่
+           *    แล้วหน้าโปะจะบอกว่า "สิทธิเต็มแล้ว" ทั้งที่หนี้ก้อนนั้นย้ายไปแบงก์อื่นแล้ว
+           */
+          rows: rowsUntilClose(actual.rows, closedDate),
+          actual,
           // "ถ้าไม่โปะ" = ตารางที่ไม่ใส่เหตุการณ์จ่ายเลย ใช้เป็นฐานวัดว่าการโปะช่วยได้แค่ไหน
           noPrepay: buildSchedule(terms),
         }
       }),
-    [bundles],
+    [bundles, today],
   )
 
   const taxYears = useMemo(
     () =>
       summariseTaxYears(
-        computed.map((c) => ({ loanId: c.item.loanId, rows: c.actual.rows })),
+        computed.map((c) => ({ loanId: c.item.loanId, rows: c.rows })),
       ),
     [computed],
   )
@@ -98,21 +118,27 @@ export function DashboardPage({
   const taxThisYear = taxYears.find((t) => t.taxYear === thisYear)
 
   // รวมทุกหลัง (ข้อ 11 ข้อ 2)
-  const totalDebt = computed.reduce(
-    (a, c) => (a + balanceOn(c.actual.rows, c.events, today, c.item.disbursedSatang)) as Fixed,
+  // ⛔ สัญญาที่ปิดแล้วต้องไม่บวกเข้าหนี้รวม หนี้ก้อนนั้นถูกปิดหรือย้ายไปสัญญาใหม่แล้ว
+  //    ถ้านับด้วย คนที่รีไฟแนนซ์จะเห็นหนี้เป็นสองเท่าของที่มีจริง
+  const stillPaying = computed.filter((c) => !c.isClosed)
+  const totalDebt = stillPaying.reduce(
+    (a, c) => (a + balanceOn(c.rows, c.events, today, c.item.disbursedSatang)) as Fixed,
     ZERO,
   )
+  // ⚠️ ดอกเบี้ยปีนี้ตรงกันข้าม — ต้องนับสัญญาที่ปิดกลางปีด้วย
+  //    ดอกที่จ่ายไปก่อนปิดเป็นดอกจริงที่ใช้ลดหย่อนได้ (rows ถูกตัดที่วันปิดแล้ว)
   const interestThisYear = computed.reduce(
     (a, c) =>
       (a +
-        c.actual.rows
+        c.rows
           .filter((r) => r.date.startsWith(String(thisYear)))
           .reduce((x, r) => (x + r.interestFixed) as Fixed, ZERO)) as Fixed,
     ZERO,
   )
 
-  const rows = selected.actual.rows
-  const currentIndex = settledPeriods(rows, selected.events, today)
+  const rows = selected.rows
+  const asOf = selected.asOf
+  const currentIndex = settledPeriods(rows, selected.events, asOf)
 
   /**
    * โปะจริงหรือยัง — เทียบตารางเต็มสองชุด ไม่ใช่ชุดที่ถูกกรองตามช่วงปีที่เลือก
@@ -144,7 +170,7 @@ export function DashboardPage({
   const shift = (delta: number) => setWindowStart(clamp(winFrom + delta, firstYear, finalYear))
   const currentRow = currentIndex > 0 ? rows[currentIndex - 1] : undefined
   const nextRow = rows[currentIndex]
-  const balance = balanceOn(rows, selected.events, today, selected.item.disbursedSatang)
+  const balance = balanceOn(rows, selected.events, asOf, selected.item.disbursedSatang)
   const principalPaid = ((selected.item.disbursedSatang * FIXED_SCALE) - balance) as Fixed
   const interestPaid = rows
     .slice(0, currentIndex)
@@ -162,7 +188,9 @@ export function DashboardPage({
         <section className="mb-6 flex flex-wrap items-baseline gap-x-8 gap-y-2">
           <div>
             <p className="text-meta text-[var(--color-ink-2)]">
-              หนี้รวมทุกหลัง ({computed.length} สัญญา)
+              หนี้รวมทุกหลัง ({stillPaying.length} สัญญา)
+              {stillPaying.length !== computed.length &&
+                ` · ปิดแล้ว ${computed.length - stillPaying.length}`}
             </p>
             <p className="num text-figure">{bahtRounded(totalDebt)}</p>
           </div>
@@ -183,7 +211,9 @@ export function DashboardPage({
               onChange={setSelectedId}
               options={computed.map((c) => ({
                 value: c.item.loanId,
-                label: `${c.item.propertyName} · ${c.item.bankLabel}`,
+                label: `${c.item.propertyName} · ${c.item.bankLabel}${
+                  c.isClosed ? ' (ปิดแล้ว)' : ''
+                }`,
               }))}
             />
           </Field>
@@ -210,15 +240,19 @@ export function DashboardPage({
             งวด {currentIndex} จาก {rows.length}
           </p>
           <p className="text-meta text-[var(--color-panel-ink-2)]">
-            {nextRow
-              ? `งวดถัดไป ${formatThaiDate(nextRow.date, 'long')}`
-              : 'ปิดหนี้ครบแล้ว'}
+            {selected.isClosed
+              ? selected.closedDate !== null
+                ? `ปิดสัญญา ${formatThaiDate(selected.closedDate, 'long')}`
+                : 'ปิดสัญญาแล้ว'
+              : nextRow
+                ? `งวดถัดไป ${formatThaiDate(nextRow.date, 'long')}`
+                : 'ปิดหนี้ครบแล้ว'}
           </p>
         </div>
 
         <p className="mt-3 num text-hero">{bahtRounded(balance)}</p>
         <p className="text-meta text-[var(--color-panel-ink-2)]">
-          ยังเป็นหนี้อยู่เท่านี้
+          {selected.isClosed ? 'ยอดที่เหลือตอนปิดสัญญา' : 'ยังเป็นหนี้อยู่เท่านี้'}
         </p>
 
         <div className="mt-5">

@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth'
 import { baht, formatDuration, formatThaiDate } from '@/lib/format'
 import { BankMark } from '@/components/BankMark'
 import { deleteLoan, getAllLoansFull, type LoanFull, type LoanListItem } from '@/lib/db'
+import { CLOSING_REASON_LABELS, rowsUntilClose } from '@/lib/closing'
 import { DashboardPage, type LoanBundle } from '../dashboard/DashboardPage'
 import { PrepayPage } from '../prepay/PrepayPage'
 import { ReconcilePage } from '../reconcile/ReconcilePage'
@@ -79,23 +80,36 @@ function TrackShell() {
 
   useEffect(reload, [reload])
 
+  /**
+   * ตารางของสัญญาหนึ่ง ตัดที่วันปิดแล้ว
+   *
+   * ⛔ ใช้ตัวนี้ทุกครั้งที่ส่ง rows ของสัญญา "อื่น" ไปคิดเพดานลดหย่อนร่วม
+   *    สัญญาที่ปิดไปแล้วยังมีงวดในอนาคตอยู่ในตาราง ถ้าไม่ตัด หน้าโปะจะบอกว่า
+   *    สิทธิลดหย่อนเต็มแล้ว ทั้งที่หนี้ก้อนนั้นย้ายไปสัญญาใหม่ตั้งแต่ปีที่แล้ว
+   */
+  const rowsOf = (b: LoanBundle) =>
+    rowsUntilClose(
+      buildSchedule(toLoanTerms(b.full), toPaymentEvents(b.full), b.plan ?? undefined).rows,
+      b.item.status === 'closed' ? b.item.closedDate : null,
+    )
+
   const items = bundles?.map((b) => b.item) ?? null
+  const active = items?.filter((i) => i.status === 'active') ?? []
+  const closed = items?.filter((i) => i.status === 'closed') ?? []
 
   if (view.kind === 'detail') {
+    /* ⚠️ view.item เป็นสำเนาตอนกดเข้ามา ปิด/เปิดสัญญาแล้วต้องหยิบตัวใหม่จาก bundles
+       ไม่งั้นกดปิดเสร็จแล้วหน้ายังบอกว่ายังผ่อนอยู่ ทั้งที่ DB เปลี่ยนไปแล้ว */
+    const fresh = items?.find((i) => i.loanId === view.item.loanId) ?? view.item
     return (
       <LoanDetail
-        item={view.item}
+        item={fresh}
+        allLoans={items ?? []}
+        onClosedChanged={reload}
         /* เพดานลดหย่อนเป็นของคนหนึ่งคน รายงานที่ส่งออกต้องนับสัญญาอื่นด้วย (ข้อ 1.9) */
         otherLoans={(bundles ?? [])
           .filter((b) => b.item.loanId !== view.item.loanId)
-          .map((b) => ({
-            loanId: b.item.loanId,
-            rows: buildSchedule(
-              toLoanTerms(b.full),
-              toPaymentEvents(b.full),
-              b.plan ?? undefined,
-            ).rows,
-          }))}
+          .map((b) => ({ loanId: b.item.loanId, rows: rowsOf(b) }))}
         onBack={() => {
           setView({ kind: 'dashboard' })
           reload()
@@ -143,13 +157,10 @@ function TrackShell() {
     if (bundle) {
       // เพดานลดหย่อนภาษีเป็นของคนหนึ่งคน ต้องส่งสัญญาอื่นไปด้วย ไม่งั้นบอกว่า
       // โปะแล้วเสียสิทธิ ทั้งที่สิทธิเต็มไปแล้วจากอีกสัญญา (ข้อ 1.9)
+      // ใส่แผนโปะของสัญญานั้นด้วย ไม่งั้นเพดานภาษีคิดจากดอกที่ไม่ตรงกับหน้าอื่น
       const others = bundles
         .filter((b) => b.item.loanId !== view.item.loanId)
-        .map((b) => ({
-          loanId: b.item.loanId,
-          // ใส่แผนโปะของสัญญานั้นด้วย ไม่งั้นเพดานภาษีคิดจากดอกที่ไม่ตรงกับหน้าอื่น
-          rows: buildSchedule(toLoanTerms(b.full), toPaymentEvents(b.full), b.plan ?? undefined).rows,
-        }))
+        .map((b) => ({ loanId: b.item.loanId, rows: rowsOf(b) }))
       return (
         <PrepayPage
           item={bundle.item}
@@ -251,17 +262,48 @@ function TrackShell() {
         </div>
       )}
 
+      {/* ⚠️ สัญญาที่ปิดแล้วต้องแยกกอง ไม่ใช่ปนกับสัญญาที่ยังผ่อนอยู่
+          คนที่รีไฟแนนซ์แล้วจะมีสัญญาเก่าค้างอยู่ตลอดไป ถ้าปนกันจะอ่านไม่ออกว่าหลังไหนยังมีหนี้ */}
       {items !== null && items.length > 0 && (
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((it) => (
-            <LoanCard
-              key={it.loanId}
-              item={it}
-              onOpen={() => setView({ kind: 'detail', item: it })}
-              onDeleted={reload}
-            />
-          ))}
-        </ul>
+        <>
+          {active.length > 0 ? (
+            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {active.map((it) => (
+                <LoanCard
+                  key={it.loanId}
+                  item={it}
+                  onOpen={() => setView({ kind: 'detail', item: it })}
+                  onDeleted={reload}
+                />
+              ))}
+            </ul>
+          ) : (
+            <p className="text-meta text-[var(--color-ink-2)]">
+              ไม่มีสัญญาที่กำลังผ่อนอยู่ — ทุกสัญญาถูกปิดไปแล้ว
+            </p>
+          )}
+
+          {closed.length > 0 && (
+            <section className="mt-8">
+              <h2 className="text-row">ปิดแล้ว ({closed.length})</h2>
+              <p className="mb-3 text-meta text-[var(--color-ink-2)]">
+                ไม่ถูกนับในยอดหนี้รวม และงวดหลังวันปิดไม่เข้าสิทธิลดหย่อน —
+                ประวัติยังอยู่ครบ กดเข้าไปเปิดกลับมาได้
+              </p>
+              <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {closed.map((it) => (
+                  <LoanCard
+                    key={it.loanId}
+                    item={it}
+                    supersededBy={items.find((l) => l.supersedesLoanId === it.loanId) ?? null}
+                    onOpen={() => setView({ kind: 'detail', item: it })}
+                    onDeleted={reload}
+                  />
+                ))}
+              </ul>
+            </section>
+          )}
+        </>
       )}
       </Shell>
     </>
@@ -306,10 +348,13 @@ const ORIGIN_LABELS: Record<LoanListItem['origin'], string> = {
 
 function LoanCard({
   item,
+  supersededBy = null,
   onOpen,
   onDeleted,
 }: {
   item: LoanListItem
+  /** สัญญาใหม่ที่มารับช่วงต่อ — มีเฉพาะการ์ดของสัญญาที่ปิดไปแล้ว */
+  supersededBy?: LoanListItem | null
   onOpen: () => void
   onDeleted: () => void
 }) {
@@ -327,7 +372,11 @@ function LoanCard({
   }
 
   return (
-    <li className="rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4">
+    <li
+      className={`rounded-lg border border-[var(--color-rule)] bg-[var(--color-paper-raised)] p-4 ${
+        item.status === 'closed' ? 'opacity-75' : ''
+      }`}
+    >
       <button onClick={onOpen} className="tap block w-full text-left">
         <div className="flex items-start gap-3">
           <BankMark code={item.bankCode} name={item.bankLabel} />
@@ -335,8 +384,16 @@ function LoanCard({
             <h2 className="text-lead">{item.propertyName}</h2>
             <p className="text-meta text-[var(--color-ink-2)]">
               {item.bankLabel} · {ORIGIN_LABELS[item.origin]}
-              {item.status === 'closed' && ' · ปิดแล้ว'}
             </p>
+            {item.status === 'closed' && (
+              <p className="mt-0.5 text-micro text-[var(--color-ink-3)]">
+                ปิดแล้ว
+                {item.closedDate !== null && ` ${formatThaiDate(item.closedDate, 'short')}`}
+                {item.closingReason !== null &&
+                  ` · ${CLOSING_REASON_LABELS[item.closingReason]}`}
+                {supersededBy !== null && ` → ${supersededBy.propertyName}`}
+              </p>
+            )}
           </div>
         </div>
 
