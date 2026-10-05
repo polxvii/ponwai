@@ -13,7 +13,7 @@ import {
 import type { ScheduleRow } from '@engine/types.js'
 import { FIXED_SCALE, type Fixed } from '@engine/money.js'
 import { groupSchedule, type GroupAxis, type TaxYearSummary } from '@engine/grouping.js'
-import { bahtRounded, formatMonthSpan } from '@/lib/format'
+import { bahtFixed, bahtNumber, formatMonthSpan } from '@/lib/format'
 
 const toBaht = (v: Fixed): number => Number(v / FIXED_SCALE) / 100
 
@@ -118,7 +118,7 @@ export function BalanceChart({
               contentStyle={tooltipStyle}
               labelFormatter={(m) => `งวดที่ ${String(m)}`}
               formatter={(v, name) => [
-                `${Math.round(Number(v)).toLocaleString('en-US')} บาท`,
+                `${bahtNumber(Number(v))} บาท`,
                 name === 'actual' ? 'จ่ายจริง' : 'ถ้าไม่โปะ',
               ]}
             />
@@ -249,7 +249,7 @@ function TipRow({ k, v, dot }: { k: string; v: number; dot?: string }) {
       )}
       <span style={{ marginRight: 'auto' }}>{k}</span>
       <span className="num tabular-nums">
-        {Math.round(v).toLocaleString('en-US')} บาท
+        {bahtNumber(v)} บาท
       </span>
     </div>
   )
@@ -364,7 +364,7 @@ export function TaxChart({
               contentStyle={tooltipStyle}
               labelFormatter={(y) => `ปีภาษี ${String(y)}`}
               formatter={(v, name) => [
-                `${Math.round(Number(v)).toLocaleString('en-US')} บาท`,
+                `${bahtNumber(Number(v))} บาท`,
                 name === 'deductible' ? 'ใช้สิทธิได้' : 'เกินเพดาน',
               ]}
             />
@@ -392,4 +392,4 @@ export function TaxChart({
   )
 }
 
-export { bahtRounded }
+export { bahtFixed }

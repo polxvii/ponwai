@@ -3,7 +3,7 @@ import { rankOffers, sensitivityBand, findRankFlips } from '@engine/compare.js'
 import { baht as toSatang } from '@engine/money.js'
 import { InstallmentBands } from '@/components/InstallmentBands'
 import { Field, NumberField, SelectField, TextField, Toggle } from '@/components/Field'
-import { formatDuration } from '@/lib/format'
+import { bahtNumber, formatDuration } from '@/lib/format'
 import { useLocalState } from '@/lib/persist'
 import { ResetButton } from '@/components/ResetButton'
 import { BankMark } from '@/components/BankMark'
@@ -433,14 +433,14 @@ function OfferForm({
 function quoteHint(quoted: number | '', locked: number | null): string | undefined {
   if (locked === null) return undefined
   if (typeof quoted !== 'number' || quoted <= 0) {
-    return `ไม่ถูกใช้คำนวณ เพราะล็อกค่างวดไว้ที่ ${locked.toLocaleString('en-US')}`
+    return `ไม่ถูกใช้คำนวณ เพราะล็อกค่างวดไว้ที่ ${bahtNumber(locked)}`
   }
   const diff = locked - quoted
   if (diff === 0) return 'เท่ากับค่างวดที่ล็อกไว้'
-  const amount = Math.abs(diff).toLocaleString('en-US')
+  const amount = bahtNumber(Math.abs(diff))
   return diff > 0
-    ? `คุณจะจ่าย ${locked.toLocaleString('en-US')} มากกว่าใบเสนอ ${amount} — ส่วนเกินลดเงินต้นทั้งก้อน`
-    : `คุณจะจ่าย ${locked.toLocaleString('en-US')} ต่ำกว่าใบเสนอ ${amount} — ธนาคารอาจไม่ยอม`
+    ? `คุณจะจ่าย ${bahtNumber(locked)} มากกว่าใบเสนอ ${amount} — ส่วนเกินลดเงินต้นทั้งก้อน`
+    : `คุณจะจ่าย ${bahtNumber(locked)} ต่ำกว่าใบเสนอ ${amount} — ธนาคารอาจไม่ยอม`
 }
 
 /**

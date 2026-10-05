@@ -6,6 +6,7 @@
  */
 
 import { baht, bps, type Satang } from '@engine/money.js'
+import { bahtNumber } from '@/lib/format'
 import { isoDate, type ISODate } from '@engine/date.js'
 import {
   installmentStepsFromYearly, rateStepsFromYearlyRates, defaultImportConvention,
@@ -219,7 +220,7 @@ export function buildScenarios(
   const out: RefinanceScenario[] = [
     {
       kind: 'stay',
-      label: `ไม่ทำอะไร คงค่างวด ${num(c.installment).toLocaleString('en-US')}`,
+      label: `ไม่ทำอะไร คงค่างวด ${bahtNumber(num(c.installment))}`,
       rateSteps: [{ fromMonth: 1, toMonth: null, kind: 'fixed', fixedRateBps: rate(c.currentRate) }],
       installmentSatang: sat(c.installment),
       termMonths: num(c.remainingMonths),
@@ -252,7 +253,7 @@ export function buildScenarios(
 
   out.push({
     kind: 'refinance',
-    label: `ย้ายไป${refiBankName(r)} ค่างวด ${num(r.installment).toLocaleString('en-US')} / ${num(r.termYears)} ปี`,
+    label: `ย้ายไป${refiBankName(r)} ค่างวด ${bahtNumber(num(r.installment))} / ${num(r.termYears)} ปี`,
     rateSteps: refiSteps,
     installmentSatang: sat(r.installment),
     installmentSteps: refiPaySteps,
@@ -264,7 +265,7 @@ export function buildScenarios(
   if (num(r.installment) < num(c.installment)) {
     out.push({
       kind: 'refinance',
-      label: `ย้ายไป${refiBankName(r)} แต่คงค่างวดเดิม ${num(c.installment).toLocaleString('en-US')}`,
+      label: `ย้ายไป${refiBankName(r)} แต่คงค่างวดเดิม ${bahtNumber(num(c.installment))}`,
       rateSteps: refiSteps,
       installmentSatang: sat(c.installment),
       termMonths: num(r.termYears) * 12,

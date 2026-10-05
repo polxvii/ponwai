@@ -398,8 +398,8 @@ function LoanCard({
         </div>
 
         <dl className="mt-3 space-y-1 text-meta">
-          <Row k="วงเงิน" v={baht(item.disbursedSatang, 0)} />
-          <Row k="ค่างวด" v={baht(item.installmentSatang, 0)} />
+          <Row k="วงเงิน" v={baht(item.disbursedSatang)} />
+          <Row k="ค่างวด" v={baht(item.installmentSatang)} />
           <Row k="ระยะเวลา" v={formatDuration(item.termMonths)} />
           <Row k="งวดแรก" v={formatThaiDate(item.firstDueDate)} />
         </dl>

@@ -5,6 +5,7 @@
  * ต้องเห็นเป็นกราฟ ไม่ใช่แค่ตัวเลขเดียว เพราะบางทางถูกกว่าช่วงแรกแต่แพงกว่าในระยะยาว
  */
 
+import { bahtNumber } from '@/lib/format'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
@@ -69,7 +70,7 @@ export function InterestCurveChart({ outcomes: all }: { outcomes: readonly Refin
             />
             <Tooltip
               formatter={(v, name) => [
-                `${Math.round(Number(v)).toLocaleString('en-US')} บาท`,
+                `${bahtNumber(Number(v))} บาท`,
                 label(String(name)),
               ]}
               labelFormatter={(m) => `เดือนที่ ${String(m)}`}

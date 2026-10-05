@@ -80,19 +80,30 @@ export function bahtFixed(v: Fixed, decimals = 2): string {
   return formatFixedBaht(v, decimals)
 }
 
-/** ตัดสตางค์ทิ้ง ใช้กับตัวเลขใหญ่ที่สตางค์ไม่มีความหมาย เช่น ดอกเบี้ยรวม 30 ปี */
-export function bahtRounded(v: Fixed): string {
-  return formatFixedBaht(v, 0)
+/**
+ * บาทจากตัวเลข JS ธรรมดา — ใช้กับค่าที่ผู้ใช้กรอกในฟอร์ม ซึ่งยังไม่ได้อยู่ในรูป Satang/Fixed
+ * ⛔ ห้ามใช้กับผลลัพธ์จาก engine ตัวนั้นเป็น Fixed ต้องผ่าน bahtFixed เพื่อไม่ให้เสียความละเอียด
+ */
+export function bahtNumber(v: number, decimals = 2): string {
+  return v.toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
 }
 
-/** ย่อเป็นหน่วยล้าน/แสน สำหรับแกนกราฟที่พื้นที่จำกัด */
-export function bahtCompact(v: Fixed): string {
-  const n = Number(v / 1_000_000_000_000n) / 100
-  const abs = Math.abs(n)
-  if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} ล้าน`
-  if (abs >= 1_000) return `${Math.round(n / 1_000)}k`
-  return String(Math.round(n))
-}
+/**
+ * ⛔ เคยมี bahtRounded ที่ตัดสตางค์ทิ้ง — เอาออกแล้ว ห้ามใส่กลับ
+ *
+ *    เหตุผลเดิมคือ "สตางค์ไม่มีความหมายกับตัวเลขใหญ่" ซึ่งผิด —
+ *    ยอดคงเหลือกับดอกเบี้ยคือเลขที่ผู้ใช้เอาไปเทียบกับใบแจ้งยอดทีละสตางค์
+ *    ทั้งแอพมีไว้เพื่อการนั้นโดยเฉพาะ การซ่อนสองหลักท้ายทำให้เทียบไม่ได้
+ *    แล้วยังทำให้ยอดเดียวกันบนคนละหน้าดูเหมือนไม่ตรงกันเพราะปัดคนละรอบ
+ *
+ *    ที่เดียวที่ย่อเลขได้คือป้ายแกนกราฟซึ่งกว้างไม่กี่สิบพิกเซล — แต่ละกราฟมี compact
+ *    ของตัวเองอยู่แล้ว และค่าที่อ่านได้จริงอยู่ใน tooltip ซึ่งแสดงเต็มทศนิยม
+ *    (bahtCompact ที่เคยอยู่ตรงนี้ไม่มีใครเรียกเลยสักที่ เอาออกพร้อมกัน)
+ *    [SOURCE: ผู้ใช้ — "เป็นเรื่องเงินทอง ไม่ต้องซ่อนทศนิยม"]
+ */
 
 // ---------- อัตราดอกเบี้ย ----------
 

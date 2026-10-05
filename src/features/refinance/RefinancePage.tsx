@@ -16,7 +16,7 @@ import { useLocalState } from '@/lib/persist'
 import { EMPTY_DRAFTS, offerLabel, reviveDrafts, type OfferDraft } from '../compare/model'
 import { ResetButton } from '@/components/ResetButton'
 import { todayISO } from '../track/model'
-import { baht, bahtRounded, formatDuration, formatThaiDate } from '@/lib/format'
+import { baht, bahtFixed, formatDuration, formatThaiDate } from '@/lib/format'
 import { BANK_OPTIONS, OTHER_BANK } from '../compare/model'
 import { InterestCurveChart } from './InterestCurveChart'
 import { useAuth } from '@/lib/auth'
@@ -212,13 +212,13 @@ function Verdict({
         </p>
       ) : (
         <p className="mt-3 num text-figure text-[var(--color-principal-dark)]">
-          ประหยัดดอกเบี้ย {bahtRounded(best.interestSavedVsStayFixed)} บาท
+          ประหยัดดอกเบี้ย {bahtFixed(best.interestSavedVsStayFixed)} บาท
         </p>
       )}
 
       <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 text-meta">
-        <PanelRow k="ดอกเบี้ยที่เหลือจ่าย" v={bahtRounded(best.futureInterestFixed)} />
-        <PanelRow k="ต้นทุนการย้าย" v={baht(best.movingCostSatang, 0)} />
+        <PanelRow k="ดอกเบี้ยที่เหลือจ่าย" v={bahtFixed(best.futureInterestFixed)} />
+        <PanelRow k="ต้นทุนการย้าย" v={baht(best.movingCostSatang)} />
         <PanelRow k="ผ่อนอีก" v={formatDuration(best.remainingPeriods)} />
         <PanelRow k="ปิดหนี้" v={formatThaiDate(best.payoffDate, 'monthYear')} />
         <PanelRow
@@ -303,14 +303,14 @@ function OutcomeTable({
                     </span>
                   )}
                 </td>
-                <Td>{baht(o.installmentSatang, 0)}</Td>
+                <Td>{baht(o.installmentSatang)}</Td>
 
                 {/* ⛔ ตัวเลขของเคสที่จ่ายไม่ไหวไม่มีความหมาย — ตอนชนเพดานงวดจะได้ดอกหลักสิบล้าน
                     แสดงสาเหตุแทน ไม่ใช่โชว์เลขใหญ่ ๆ ให้เทียบกับของจริง */}
                 {o.feasible ? (
                   <>
-                    <Td>{bahtRounded(o.futureInterestFixed)}</Td>
-                    <Td>{o.kind === 'stay' ? '—' : baht(o.movingCostSatang, 0)}</Td>
+                    <Td>{bahtFixed(o.futureInterestFixed)}</Td>
+                    <Td>{o.kind === 'stay' ? '—' : baht(o.movingCostSatang)}</Td>
                     <Td
                       tone={
                         o.kind === 'stay'
@@ -320,7 +320,7 @@ function OutcomeTable({
                             : 'ok'
                       }
                     >
-                      {o.kind === 'stay' ? '—' : bahtRounded(o.interestSavedVsStayFixed)}
+                      {o.kind === 'stay' ? '—' : bahtFixed(o.interestSavedVsStayFixed)}
                     </Td>
                     <Td>{formatDuration(o.remainingPeriods)}</Td>
                     <Td tone={o.kind !== 'stay' && o.breakevenBeyondLockin ? 'warn' : undefined}>
@@ -333,7 +333,7 @@ function OutcomeTable({
                   </>
                 ) : (
                   <td colSpan={5} className="py-3 pr-4 text-meta text-[var(--color-warn)]">
-                    {o.infeasibleReason} · ต้องจ่ายอย่างน้อย {baht(o.minInstallmentSatang, 0)} บาท
+                    {o.infeasibleReason} · ต้องจ่ายอย่างน้อย {baht(o.minInstallmentSatang)} บาท
                   </td>
                 )}
               </tr>
@@ -506,7 +506,7 @@ function CurrentLoanForm({
             num(c.lockinLeftMonths) === 0
               ? 'ไม่ถูกเก็บ เพราะพ้น lock-in แล้ว'
               : penalty > 0n
-                ? `คิดเป็น ${baht(penalty, 0)} บาท`
+                ? `คิดเป็น ${baht(penalty)} บาท`
                 : `ยังเหลือ lock-in ${num(c.lockinLeftMonths)} เดือน ต้องกรอก % ไม่งั้นคิดเป็น 0`
           }
         >
@@ -713,7 +713,7 @@ function RefiForm({
 
       <details className="mt-3" open>
         <summary className="tap cursor-pointer text-meta text-[var(--color-ink-2)]">
-          ต้นทุนการย้าย รวมแล้ว {baht(movingCost, 0)} บาท
+          ต้นทุนการย้าย รวมแล้ว {baht(movingCost)} บาท
         </summary>
         <div className="mt-3 space-y-3">
           <div className="grid grid-cols-2 gap-3">

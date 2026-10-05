@@ -21,7 +21,7 @@ import { SplitBar, CapMeter } from '@/components/SplitBar'
 import { Field, SelectField } from '@/components/Field'
 import { SwipeX } from '@/components/SwipeX'
 import { BankMark } from '@/components/BankMark'
-import { baht, bahtRounded, formatDuration, formatThaiDate } from '@/lib/format'
+import { baht, bahtFixed, formatDuration, formatThaiDate } from '@/lib/format'
 import { toLoanTerms, toPaymentEvents, type LoanFull, type LoanListItem } from '@/lib/db'
 import type { PrepayPlan } from '@engine/prepay.js'
 import { BalanceChart, TaxChart, YearBarsChart } from './charts'
@@ -202,13 +202,13 @@ export function DashboardPage({
               {stillPaying.length !== computed.length &&
                 ` · ปิดแล้ว ${computed.length - stillPaying.length}`}
             </p>
-            <p className="num text-figure">{bahtRounded(totalDebt)}</p>
+            <p className="num text-figure">{bahtFixed(totalDebt)}</p>
           </div>
           <div>
             <p className="text-meta text-[var(--color-ink-2)]">
               ดอกเบี้ยรวมปี {thisYear + 543}
             </p>
-            <p className="num text-figure">{bahtRounded(interestThisYear)}</p>
+            <p className="num text-figure">{bahtFixed(interestThisYear)}</p>
           </div>
         </section>
       )}
@@ -260,7 +260,7 @@ export function DashboardPage({
           </p>
         </div>
 
-        <p className="mt-3 num text-hero">{bahtRounded(balance)}</p>
+        <p className="mt-3 num text-hero">{bahtFixed(balance)}</p>
         <p className="text-meta text-[var(--color-panel-ink-2)]">
           {selected.isClosed ? 'ยอดที่เหลือตอนปิดสัญญา' : 'ยังเป็นหนี้อยู่เท่านี้'}
         </p>
@@ -274,7 +274,7 @@ export function DashboardPage({
       {currentRow && (
         <section className="mt-6">
           <p className="text-lead">
-            งวดที่ {currentRow.index} จ่าย {bahtRounded(currentRow.paymentFixed)}
+            งวดที่ {currentRow.index} จ่าย {bahtFixed(currentRow.paymentFixed)}
           </p>
           <SplitBar
             className="mt-2 max-w-[520px]"
@@ -283,17 +283,17 @@ export function DashboardPage({
             height={10}
           />
           <p className="mt-1 text-meta text-[var(--color-ink-2)]">
-            เป็นดอกเบี้ย {bahtRounded(currentRow.interestFixed)} เข้าเงินต้น{' '}
-            {bahtRounded(currentRow.principalFixed)} · คิดดอก {currentRow.accrualDays} วัน
+            เป็นดอกเบี้ย {bahtFixed(currentRow.interestFixed)} เข้าเงินต้น{' '}
+            {bahtFixed(currentRow.principalFixed)} · คิดดอก {currentRow.accrualDays} วัน
           </p>
         </section>
       )}
 
       {/* ---------- ตัวเลขสรุป ---------- */}
       <section className="mt-6 max-w-[520px] divide-y divide-[var(--color-rule)]">
-        <Line k={`จ่ายไปแล้ว ${currentIndex} งวด`} v={bahtRounded(cashPaid)} />
-        <Line k="หายไปกับดอกเบี้ย" v={bahtRounded(interestPaid)} tone="interest" />
-        <Line k="กลายเป็นของเราแล้ว" v={bahtRounded(principalPaid)} tone="principal" />
+        <Line k={`จ่ายไปแล้ว ${currentIndex} งวด`} v={bahtFixed(cashPaid)} />
+        <Line k="หายไปกับดอกเบี้ย" v={bahtFixed(interestPaid)} tone="interest" />
+        <Line k="กลายเป็นของเราแล้ว" v={bahtFixed(principalPaid)} tone="principal" />
         {selected.isClosed ? (
           /* ⛔ ห้ามใช้คำว่า "ปิดหนี้" กับสัญญาที่รีไฟแนนซ์ออกไป หนี้ยังอยู่ แค่ย้ายแบงก์
              และห้ามบอก "เร็วขึ้นกี่ปี" เพราะตารางฝั่งไหนก็จบที่วันปิดเหมือนกัน */
@@ -335,7 +335,7 @@ export function DashboardPage({
         {taxThisYear ? (
           <>
             <p className="mt-3 num text-figure">
-              {bahtRounded(taxThisYear.deductibleFixed)}
+              {bahtFixed(taxThisYear.deductibleFixed)}
             </p>
             <CapMeter
               used={taxThisYear.deductibleFixed}
@@ -343,8 +343,8 @@ export function DashboardPage({
             />
             <p className="mt-1 text-meta text-[var(--color-ink-2)]">
               {taxThisYear.excessFixed > 0n
-                ? `เต็มเพดานแล้ว ส่วนที่เกิน ${bahtRounded(taxThisYear.excessFixed)} ใช้สิทธิไม่ได้`
-                : `เหลือสิทธิอีก ${bahtRounded(((TAX_DEDUCTION_CAP_SATANG * FIXED_SCALE) - taxThisYear.deductibleFixed) as Fixed)}`}
+                ? `เต็มเพดานแล้ว ส่วนที่เกิน ${bahtFixed(taxThisYear.excessFixed)} ใช้สิทธิไม่ได้`
+                : `เหลือสิทธิอีก ${bahtFixed(((TAX_DEDUCTION_CAP_SATANG * FIXED_SCALE) - taxThisYear.deductibleFixed) as Fixed)}`}
             </p>
           </>
         ) : (

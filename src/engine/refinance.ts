@@ -323,6 +323,10 @@ function maxRateOf(ctx: RefinanceContext, sc: RefinanceScenario): Bps {
   return max as Bps
 }
 
+/** ⛔ ต้องมีทศนิยม เป็นยอดที่ผู้ใช้เอาไปกรอกต่อ ปัดแล้วกรอกตามจะยังไม่พอจ่าย */
 function formatBaht(v: Satang): string {
-  return (Number(v) / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })
+  return (Number(v) / 100).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }

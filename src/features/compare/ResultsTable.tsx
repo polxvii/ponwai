@@ -8,7 +8,7 @@
 
 import type { RankedOffer } from '@engine/compare.js'
 import type { Fixed } from '@engine/money.js'
-import { bahtFixed, bahtRounded, baht, pct, formatPeriods } from '@/lib/format'
+import { bahtFixed, baht, pct, formatPeriods } from '@/lib/format'
 import { SplitBar } from '@/components/SplitBar'
 import { BankMark } from '@/components/BankMark'
 
@@ -79,11 +79,11 @@ export function ResultsTable({
                     </span>
                   )}
                 </td>
-                <Td strong>{bahtRounded(r.netPositionFixed)}</Td>
-                <Td>{bahtRounded(r.interestPaidToHorizonFixed)}</Td>
-                <Td>{bahtRounded(r.balanceAtHorizonFixed)}</Td>
+                <Td strong>{bahtFixed(r.netPositionFixed)}</Td>
+                <Td>{bahtFixed(r.interestPaidToHorizonFixed)}</Td>
+                <Td>{bahtFixed(r.balanceAtHorizonFixed)}</Td>
                 <Td>{r.eirBps === null ? '—' : pct(r.eirBps)}</Td>
-                <Td>{baht(r.minInstallmentAfterPromoSatang, 0)}</Td>
+                <Td>{baht(r.minInstallmentAfterPromoSatang)}</Td>
                 <Td>{formatPeriods(r.totalPeriods)}</Td>
               </tr>
             ))}
@@ -161,11 +161,11 @@ function OfferCardMobile({
         <p className="mt-2 text-meta text-[var(--color-warn)]">{r.infeasibleReason}</p>
       ) : (
         <>
-          <p className="mt-3 num text-figure">{bahtRounded(r.netPositionFixed)}</p>
+          <p className="mt-3 num text-figure">{bahtFixed(r.netPositionFixed)}</p>
           <p className="text-meta text-[var(--color-ink-2)]">
             Net Position ณ เดือนที่ {horizonMonths}
             {gap !== null && gap > 0n && (
-              <span className="text-[var(--color-warn)]"> · แพงกว่าอันดับ 1 {bahtRounded(gap)}</span>
+              <span className="text-[var(--color-warn)]"> · แพงกว่าอันดับ 1 {bahtFixed(gap)}</span>
             )}
           </p>
 
@@ -177,12 +177,12 @@ function OfferCardMobile({
           />
 
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-meta">
-            <Row k={`ดอกเบี้ย ${horizonMonths} งวด`} v={bahtRounded(r.interestPaidToHorizonFixed)} />
-            <Row k="เงินต้นคงเหลือ" v={bahtRounded(r.balanceAtHorizonFixed)} />
+            <Row k={`ดอกเบี้ย ${horizonMonths} งวด`} v={bahtFixed(r.interestPaidToHorizonFixed)} />
+            <Row k="เงินต้นคงเหลือ" v={bahtFixed(r.balanceAtHorizonFixed)} />
             <Row k="EIR" v={r.eirBps === null ? '—' : pct(r.eirBps)} />
-            <Row k="พ้นโปรต้องจ่าย" v={baht(r.minInstallmentAfterPromoSatang, 0)} />
+            <Row k="พ้นโปรต้องจ่าย" v={baht(r.minInstallmentAfterPromoSatang)} />
             <Row k="ผ่อนทั้งหมด" v={formatPeriods(r.totalPeriods)} />
-            <Row k="ดอกเบี้ยรวมตลอดสัญญา" v={bahtFixed(r.totalInterestFixed, 0)} />
+            <Row k="ดอกเบี้ยรวมตลอดสัญญา" v={bahtFixed(r.totalInterestFixed)} />
           </dl>
         </>
       )}

@@ -10,7 +10,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import type { RankedOffer } from '@engine/compare.js'
-import { bahtRounded } from '@/lib/format'
+import { bahtFixed, bahtNumber } from '@/lib/format'
 
 /** สีของเส้นแต่ละธนาคาร — ไล่จากคู่สีหลัก ไม่เอา rainbow palette */
 const SERIES_COLORS = [
@@ -81,7 +81,7 @@ export function CostCurveChart({
             />
             <Tooltip
               formatter={(v, name) => [
-                `${Math.round(Number(v)).toLocaleString('en-US')} บาท`,
+                `${bahtNumber(Number(v))} บาท`,
                 nameOf(String(name)),
               ]}
               labelFormatter={(m) => `งวดที่ ${String(m)}`}
@@ -158,7 +158,7 @@ export function SensitivityBand({
                     {b.deltaBps === 0 ? 'ปัจจุบัน' : `${b.deltaBps > 0 ? '+' : ''}${(b.deltaBps / 100).toFixed(2)}%`}
                   </td>
                   <td className="py-2 pr-4">{nameOf(top.bankCode)}</td>
-                  <td className="py-2 text-right num">{bahtRounded(top.netPositionFixed)}</td>
+                  <td className="py-2 text-right num">{bahtFixed(top.netPositionFixed)}</td>
                 </tr>
               )
             })}

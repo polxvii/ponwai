@@ -18,7 +18,7 @@ import { month as monthOf, year as yearOf, type ISODate } from '@engine/date.js'
 import type { ScheduleRow } from '@engine/types.js'
 import { SplitBar } from '@/components/SplitBar'
 import { Field, NumberField, SelectField, TextField, DateField } from '@/components/Field'
-import { baht, bahtRounded, formatDuration, formatThaiDate, pct } from '@/lib/format'
+import { baht, bahtFixed, bahtNumber, formatDuration, formatThaiDate, pct } from '@/lib/format'
 import { isoDate } from '@engine/date.js'
 import { interestUpTo, prepayOfRow, settledPeriods } from '@/lib/progress'
 import {
@@ -378,7 +378,7 @@ export function PrepayPage({
       <header className="mb-6">
         <h1 className="text-hero">วางแผนโปะ</h1>
         <p className="mt-1 text-meta text-[var(--color-ink-2)]">
-          {item.propertyName} · {item.bankLabel} · ค่างวด {baht(item.installmentSatang, 0)}
+          {item.propertyName} · {item.bankLabel} · ค่างวด {baht(item.installmentSatang)}
         </p>
       </header>
 
@@ -393,11 +393,11 @@ export function PrepayPage({
               <div className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
                 <Stat
                   k="โปะไปแล้วจริง"
-                  v={Math.round(paidExtraTotal).toLocaleString('en-US')}
+                  v={bahtNumber(paidExtraTotal)}
                 />
                 <Stat
                   k="ประหยัดดอกไปแล้ว"
-                  v={bahtRounded(done.interestSavedSoFarFixed)}
+                  v={bahtFixed(done.interestSavedSoFarFixed)}
                   tone="principal"
                   sub={`ใน ${done.settled} งวดที่ผ่านมา`}
                 />
@@ -409,7 +409,7 @@ export function PrepayPage({
                   <Stat
                     k="ปิดหนี้เร็วขึ้นแล้ว"
                     v={formatDuration(done.periodsSaved)}
-                    sub={`ประหยัดดอกทั้งสัญญา ${bahtRounded(done.interestSavedLifetimeFixed)}`}
+                    sub={`ประหยัดดอกทั้งสัญญา ${bahtFixed(done.interestSavedLifetimeFixed)}`}
                   />
                 ) : done.periodsBeforeTerm !== null && done.periodsBeforeTerm > 0 ? (
                   <Stat
@@ -418,7 +418,7 @@ export function PrepayPage({
                     {...(done.balanceAtTermFixed === null
                       ? {}
                       : {
-                          sub: `ถ้าไม่โปะ ครบ ${formatDuration(terms.termMonths)} ยังเหลือหนี้ ${bahtRounded(done.balanceAtTermFixed)}`,
+                          sub: `ถ้าไม่โปะ ครบ ${formatDuration(terms.termMonths)} ยังเหลือหนี้ ${bahtFixed(done.balanceAtTermFixed)}`,
                         })}
                   />
                 ) : (
@@ -434,8 +434,8 @@ export function PrepayPage({
                 <p className="mt-3 text-micro text-[var(--color-panel-ink-3)]">
                   {done.interestPerPeriodFixed !== null && done.installmentAtTermFixed !== null && (
                     <>
-                      หลังพ้นโปร ดอกเบี้ยงวดละ {bahtRounded(done.interestPerPeriodFixed)} แต่ค่างวดมี{' '}
-                      {bahtRounded(done.installmentAtTermFixed)} เงินต้นจึงไม่ถูกตัดเลย{' '}
+                      หลังพ้นโปร ดอกเบี้ยงวดละ {bahtFixed(done.interestPerPeriodFixed)} แต่ค่างวดมี{' '}
+                      {bahtFixed(done.installmentAtTermFixed)} เงินต้นจึงไม่ถูกตัดเลย{' '}
                     </>
                   )}
                   จ่ายตามค่างวดอย่างเดียวหนี้ไม่ลดไม่ว่าผ่านไปกี่ปี จึงไม่มีวันปิดหนี้ของฝั่งนั้น —
@@ -464,12 +464,12 @@ export function PrepayPage({
           />
           <Stat
             k="ประหยัดดอกเบี้ย"
-            v={baseline.paidOff ? bahtRounded(outcome.interestSavedFixed) : '—'}
+            v={baseline.paidOff ? bahtFixed(outcome.interestSavedFixed) : '—'}
             tone="principal"
           />
           <Stat
             k="เงินที่จะโปะเพิ่ม"
-            v={bahtRounded(outcome.totalPrepaidFixed)}
+            v={bahtFixed(outcome.totalPrepaidFixed)}
           />
           <Stat
             k="ได้คืนต่อเงินโปะ 1 บาท"
@@ -507,7 +507,7 @@ export function PrepayPage({
           hint={
             taxRateBps === null
               ? 'เว้นว่างได้ ถ้าไม่กรอกจะไม่แสดงผลตอบแทนหลังภาษี — ไม่เดาแทน'
-              : `เสียสิทธิลดหย่อนจากการโปะรวม ${bahtRounded(outcome.deductionLostFixed)} บาท`
+              : `เสียสิทธิลดหย่อนจากการโปะรวม ${bahtFixed(outcome.deductionLostFixed)} บาท`
           }
         >
           <NumberField
@@ -523,7 +523,7 @@ export function PrepayPage({
         <section className="mt-6">
           <h2 className="text-row">สิทธิลดหย่อนดอกเบี้ยรายปี</h2>
           <p className="mt-1 text-meta text-[var(--color-ink-2)]">
-            เพดาน {bahtRounded(CAP_FIXED)} บาทต่อคนต่อปี นับรวมทุกสัญญาของคุณแล้ว
+            เพดาน {bahtFixed(CAP_FIXED)} บาทต่อคนต่อปี นับรวมทุกสัญญาของคุณแล้ว
           </p>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[420px] border-collapse text-meta">
@@ -549,15 +549,15 @@ export function PrepayPage({
                   <tr key={r.year} className="border-b border-[var(--color-rule)]">
                     <td className="py-2 pr-4 whitespace-nowrap">{r.year + 543}</td>
                     <td className="py-2 pr-4 text-right num text-[var(--color-ink-3)]">
-                      {bahtRounded(r.before)}
+                      {bahtFixed(r.before)}
                     </td>
-                    <td className="py-2 pr-4 text-right num">{bahtRounded(r.after)}</td>
+                    <td className="py-2 pr-4 text-right num">{bahtFixed(r.after)}</td>
                     <td className="py-2 pr-4 text-right num font-medium">
-                      {bahtRounded(r.deductible)}
+                      {bahtFixed(r.deductible)}
                     </td>
                     {/* เหลือเพดาน = ดอกไม่พอจะใช้สิทธิให้เต็ม ไม่ใช่ความผิดพลาดที่ต้องไปแก้ */}
                     <td className="py-2 text-right num text-[var(--color-ink-3)]">
-                      {r.unused > 0n ? bahtRounded(r.unused) : '—'}
+                      {r.unused > 0n ? bahtFixed(r.unused) : '—'}
                     </td>
                   </tr>
                 ))}
@@ -570,10 +570,10 @@ export function PrepayPage({
               ขาดทุนทุกอัตราภาษี ต้องบอกส่วนต่างสุทธิให้เห็น ไม่ใช่ช่วยให้ทำสิ่งที่เสียเปรียบ */}
           {outcome.deductionLostFixed > 0n && (
             <p className="mt-3 text-micro text-[var(--color-ink-2)]">
-              แผนนี้ทำให้ใช้สิทธิลดหย่อนได้น้อยลงรวม {bahtRounded(outcome.deductionLostFixed)} บาท
+              แผนนี้ทำให้ใช้สิทธิลดหย่อนได้น้อยลงรวม {bahtFixed(outcome.deductionLostFixed)} บาท
               {taxRateBps !== null &&
-                ` = เสียภาษีเพิ่มประมาณ ${bahtRounded(((outcome.deductionLostFixed * BigInt(taxRateBps)) / 10_000n) as Fixed)} บาท`}
-              {' '}แต่ประหยัดดอกเบี้ยจริง {bahtRounded(outcome.interestSavedFixed)} บาท —
+                ` = เสียภาษีเพิ่มประมาณ ${bahtFixed(((outcome.deductionLostFixed * BigInt(taxRateBps)) / 10_000n) as Fixed)} บาท`}
+              {' '}แต่ประหยัดดอกเบี้ยจริง {bahtFixed(outcome.interestSavedFixed)} บาท —
               การคงหนี้ไว้เพื่อรักษาสิทธิคือจ่ายดอกเต็มจำนวนเพื่อได้ภาษีคืนบางส่วน จึงไม่คุ้มทุกอัตราภาษี
             </p>
           )}
@@ -923,7 +923,7 @@ function CalendarView({
               {/* ค่างวดที่ต้องจ่ายอยู่แล้วของเดือนนั้น — ฐานที่ยอดโปะจะไปบวกเพิ่ม */}
               {due !== undefined && (
                 <span className="block text-micro text-[var(--color-ink-3)]">
-                  ค่างวด {Math.round(due).toLocaleString('en-US')}
+                  ค่างวด {bahtNumber(due)}
                 </span>
               )}
             </button>
@@ -933,7 +933,7 @@ function CalendarView({
                 title="ยอดที่จ่ายเกินค่างวดไปแล้วจริง แก้ที่นี่ไม่ได้ — ต้องแก้ที่ยอดชำระจริงของงวดนั้น"
                 className="mt-1 block w-full cursor-not-allowed text-right num text-row text-[var(--color-principal-dark)]"
               >
-                {done.toLocaleString('en-US')}
+                {bahtNumber(done)}
               </span>
             ) : editing === m ? (
               <input
@@ -961,7 +961,7 @@ function CalendarView({
                 {v === 0 ? (
                   <span className="text-[var(--color-ink-3)]">—</span>
                 ) : (
-                  v.toLocaleString('en-US')
+                  bahtNumber(v)
                 )}
               </button>
             )}
@@ -969,7 +969,7 @@ function CalendarView({
             {/* ยอดที่ต้องโอนจริงเดือนนั้น = ค่างวด + โปะ — เลขที่เอาไปเทียบกับเงินในบัญชีได้ตรง ๆ */}
             {total !== undefined && total > 0 && (
               <span className="mt-1 block text-right text-micro text-[var(--color-ink-3)]">
-                รวม {Math.round(total).toLocaleString('en-US')}
+                รวม {bahtNumber(total)}
               </span>
             )}
 
@@ -1022,16 +1022,16 @@ function ListView({ rows, year }: { rows: readonly ScheduleRow[]; year: number }
               <span className="num">
                 {r.prepayFixed > 0n ? (
                   <>
-                    {bahtRounded(installment)}
+                    {bahtFixed(installment)}
                     <span className="text-[var(--color-ink-3)]"> + </span>
                     <span className="text-[var(--color-principal-text)]">
-                      {bahtRounded(r.prepayFixed)}
+                      {bahtFixed(r.prepayFixed)}
                     </span>
                     <span className="text-[var(--color-ink-3)]"> = </span>
-                    <span className="font-medium">{bahtRounded(r.paymentFixed)}</span>
+                    <span className="font-medium">{bahtFixed(r.paymentFixed)}</span>
                   </>
                 ) : (
-                  <span className="font-medium">{bahtRounded(r.paymentFixed)}</span>
+                  <span className="font-medium">{bahtFixed(r.paymentFixed)}</span>
                 )}
               </span>
             </div>
@@ -1045,10 +1045,10 @@ function ListView({ rows, year }: { rows: readonly ScheduleRow[]; year: number }
 
             <div className="mt-1 flex flex-wrap justify-between gap-x-4 text-micro text-[var(--color-ink-2)]">
               <span>
-                ดอก {bahtRounded(r.interestFixed)} · ต้น {bahtRounded(r.principalFixed)} ·{' '}
+                ดอก {bahtFixed(r.interestFixed)} · ต้น {bahtFixed(r.principalFixed)} ·{' '}
                 {pct(r.effectiveRateBps)}
               </span>
-              <span className="num">เหลือ {bahtRounded(r.balanceAfterFixed)}</span>
+              <span className="num">เหลือ {bahtFixed(r.balanceAfterFixed)}</span>
             </div>
           </li>
         )

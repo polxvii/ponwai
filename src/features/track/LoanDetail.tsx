@@ -16,7 +16,7 @@ import type { PaymentEvent, PaymentKind, ScheduleRow } from '@engine/types.js'
 import { Field, NumberField, SelectField, TextField, DateField } from '@/components/Field'
 import { SplitBar } from '@/components/SplitBar'
 import {
-  baht, bahtFixed, bahtRounded, formatAccrualRange, formatDuration, formatMonthSpan,
+  baht, bahtFixed, bahtNumber, formatAccrualRange, formatDuration, formatMonthSpan,
   formatThaiDate, pct,
 } from '@/lib/format'
 import { downloadCsv, paymentsCsv, reportName, scheduleCsv, yearSummaryCsv } from '@/lib/export'
@@ -240,9 +240,9 @@ export function LoanDetail({
           {contractAtTerm && (
             <>
               {' '}— ครบ {formatDuration(item.termMonths)} แล้วยังเหลือหนี้{' '}
-              {bahtRounded(contractAtTerm.balanceAfterFixed)} เพราะดอกเบี้ยงวดละ{' '}
-              {bahtRounded(contractAtTerm.interestFixed)} มากกว่าค่างวด{' '}
-              {baht(installmentNext, 0)}
+              {bahtFixed(contractAtTerm.balanceAfterFixed)} เพราะดอกเบี้ยงวดละ{' '}
+              {bahtFixed(contractAtTerm.interestFixed)} มากกว่าค่างวด{' '}
+              {baht(installmentNext)}
             </>
           )}
           {' '}ลองตรวจช่อง &quot;ค่างวดหลังพ้นโปร&quot; กับอัตราลอยตัวอีกครั้ง
@@ -253,7 +253,7 @@ export function LoanDetail({
       {actual.totalCapitalisedFixed > 0n && (
         <p className="mb-4 rounded-md bg-[var(--color-warn)]/10 px-3 py-2 text-meta text-[var(--color-warn)]">
           ⚠️ มีงวดที่จ่ายไม่พอดอกเบี้ย ดอกที่เหลือถูกทบเข้าเงินต้นรวม{' '}
-          {bahtRounded(actual.totalCapitalisedFixed)} บาท
+          {bahtFixed(actual.totalCapitalisedFixed)} บาท
         </p>
       )}
 
@@ -262,7 +262,7 @@ export function LoanDetail({
         <p className="text-meta text-[var(--color-panel-ink-2)]">
           {isClosed ? 'ยอดที่เหลือตอนปิดสัญญา' : 'ยอดคงเหลือวันนี้'}
         </p>
-        <p className="mt-1 num text-hero">{bahtRounded(balanceNow)}</p>
+        <p className="mt-1 num text-hero">{bahtFixed(balanceNow)}</p>
 
         <SplitBar
           className="mt-4"
@@ -273,16 +273,16 @@ export function LoanDetail({
         />
         <p className="mt-1 text-micro text-[var(--color-panel-ink-3)]">
           {isClosed
-            ? `ตัดเงินต้นไปได้เอง ${bahtRounded(principalPaid)} · ปิดยอดที่เหลือ ${bahtRounded(balanceNow)}`
-            : `เป็นของเราแล้ว ${bahtRounded(principalPaid)} · ยังเป็นหนี้ ${bahtRounded(balanceNow)}`}
+            ? `ตัดเงินต้นไปได้เอง ${bahtFixed(principalPaid)} · ปิดยอดที่เหลือ ${bahtFixed(balanceNow)}`
+            : `เป็นของเราแล้ว ${bahtFixed(principalPaid)} · ยังเป็นหนี้ ${bahtFixed(balanceNow)}`}
         </p>
 
         <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-1 text-meta sm:grid-cols-3">
           <PanelRow k="ผ่อนมาแล้ว" v={`${paidPeriods} งวด`} />
-          <PanelRow k="ดอกเบี้ยที่จ่ายไป" v={bahtRounded(interestPaid)} />
+          <PanelRow k="ดอกเบี้ยที่จ่ายไป" v={bahtFixed(interestPaid)} />
           {/* ค่างวดของงวดที่กำลังจะถึง ไม่ใช่ค่างวดตั้งต้นของสัญญา
               สัญญาที่ค่างวดต่างกันตามช่วง ค่าตั้งต้นจะเป็นของปีแรกตลอดไป ซึ่งผิดตั้งแต่พ้นโปร */}
-          {!isClosed && <PanelRow k="ค่างวดงวดถัดไป" v={baht(installmentNext, 0)} />}
+          {!isClosed && <PanelRow k="ค่างวดงวดถัดไป" v={baht(installmentNext)} />}
           <PanelRow
             k={isClosed ? 'วันปิดสัญญา' : 'ปิดหนี้'}
             v={
@@ -700,8 +700,8 @@ function CloseSection({
 
       <dl className="mt-4 grid gap-x-6 gap-y-1 border-t border-[var(--color-rule)] pt-3 text-meta sm:grid-cols-2">
         <SumRow k="ผ่อนไปแล้ว" v={`${periods} งวด จาก ${item.termMonths} งวดตามสัญญา`} />
-        <SumRow k="ดอกเบี้ยที่จ่ายไปทั้งหมด" v={bahtRounded(interestPaid)} />
-        <SumRow k="ยอดที่เหลือ ณ วันปิด" v={bahtRounded(balanceAtClose)} />
+        <SumRow k="ดอกเบี้ยที่จ่ายไปทั้งหมด" v={bahtFixed(interestPaid)} />
+        <SumRow k="ยอดที่เหลือ ณ วันปิด" v={bahtFixed(balanceAtClose)} />
         <SumRow
           k="งวดที่จะไม่ถูกนับอีก"
           v={dropped > 0 ? `${dropped} งวด (${formatDuration(dropped)})` : 'ไม่มี'}
@@ -713,7 +713,7 @@ function CloseSection({
           ไม่ใช่ให้ไปเจอตอนยื่นภาษีแล้วตัวเลขไม่ตรงหนังสือรับรองของธนาคาร */}
       {balanceAtClose > 0n && !hasRedemption && (
         <p className="mt-3 rounded-md bg-[var(--color-principal-tint)] px-3 py-2 text-meta">
-          ยังไม่ได้บันทึกยอดปิดบัญชี {bahtRounded(balanceAtClose)} เป็นรายการจ่าย — ปิดสัญญาได้เลย
+          ยังไม่ได้บันทึกยอดปิดบัญชี {bahtFixed(balanceAtClose)} เป็นรายการจ่าย — ปิดสัญญาได้เลย
           แต่ถ้าอยากให้ดอกเบี้ยช่วงสุดท้าย (ตั้งแต่วันตัดงวดล่าสุดถึงวันปิด)
           เข้าสรุปรายปีและสิทธิลดหย่อนของปีนี้ด้วย ให้บันทึกรายการจ่ายประเภท
           &quot;ปิดบัญชี&quot; ที่หัวข้อด้านล่างก่อน
@@ -903,7 +903,7 @@ function PaymentSection({
               จึงต้องยืนยันตรงนี้ ไม่งั้นผู้ใช้จะบันทึก "โปะบางส่วน" ซ้ำแล้วยอดหนี้หายไปสองเท่า */}
           {kind === 'installment' && typeof amount === 'number' && amount > overDue && (
             <p className="mt-3 text-meta text-[var(--color-principal-dark)]">
-              เกินค่างวด {Math.round(amount - overDue).toLocaleString('en-US')} บาท —
+              เกินค่างวด {bahtNumber(amount - overDue)} บาท —
               ส่วนนี้ตัดเงินต้นให้อัตโนมัติ ไม่ต้องบันทึกเป็น &quot;โปะบางส่วน&quot; ซ้ำอีกรายการ
             </p>
           )}
@@ -1033,13 +1033,13 @@ function YearTable({ rows, axis }: { rows: readonly ScheduleRow[]; axis: GroupAx
                 </span>
               </td>
               <TdRight>{g.periodCount}</TdRight>
-              <TdRight>{bahtRounded(g.interestFixed)}</TdRight>
-              <TdRight>{bahtRounded(g.principalFixed)}</TdRight>
+              <TdRight>{bahtFixed(g.interestFixed)}</TdRight>
+              <TdRight>{bahtFixed(g.principalFixed)}</TdRight>
               <TdRight>
-                <span className="font-medium">{bahtRounded(g.paymentFixed)}</span>
+                <span className="font-medium">{bahtFixed(g.paymentFixed)}</span>
               </TdRight>
               <TdRight>{pct(g.effectiveRateBps)}</TdRight>
-              <TdRight>{bahtRounded(g.closingBalanceFixed)}</TdRight>
+              <TdRight>{bahtFixed(g.closingBalanceFixed)}</TdRight>
             </tr>
           ))}
         </tbody>
@@ -1202,7 +1202,7 @@ function ScheduleTable({
                 paid.length === 0 || (paid.length === 1 && paid[0]!.date === r.date)
                   ? null
                   : paid
-                      .map((e) => `${formatThaiDate(e.date, 'dayMonth')} ${baht(e.amountSatang, 0)}`)
+                      .map((e) => `${formatThaiDate(e.date, 'dayMonth')} ${baht(e.amountSatang)}`)
                       .join(' · ')
               // 'prepay' ไม่ต้องติดป้าย — คอลัมน์โปะบอกยอดอยู่แล้ว ป้ายซ้ำเปลืองที่บนจอแคบ
               const otherFlags = r.flags.filter(

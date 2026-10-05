@@ -55,7 +55,6 @@ function money(v: Fixed | Satang | bigint, scale: bigint, decimals: 0 | 2): stri
   return `${neg ? '-' : ''}${whole}${tail}`
 }
 
-const b0 = (v: Fixed): string => money(v, FIXED_SCALE, 0)
 const b2 = (v: Fixed): string => money(v, FIXED_SCALE, 2)
 const s2 = (v: Satang | bigint): string => money(v, 1n, 2)
 
@@ -189,11 +188,11 @@ export function loanReportHtml(x: ReportInput): string {
   const closed = x.closed ?? null
   const cards: readonly (readonly [string, string, string])[] = [
     closed !== null
-      ? ['ยอดที่เหลือตอนปิด', b0(balance), `ปิดที่งวดที่ ${x.settled}`]
-      : ['ยังเป็นหนี้อยู่', b0(balance), `ณ งวดที่ ${x.settled} จาก ${x.rows.length}`],
-    ['จ่ายไปแล้ว', b0(paidTotal), `${x.settled} งวด`],
-    ['หายไปกับดอกเบี้ย', b0(paidInterest), 'ส่วนที่ไม่ได้ลดหนี้'],
-    ['กลายเป็นของเราแล้ว', b0(paidPrincipal), 'เงินต้นที่ตัดไปแล้ว'],
+      ? ['ยอดที่เหลือตอนปิด', b2(balance), `ปิดที่งวดที่ ${x.settled}`]
+      : ['ยังเป็นหนี้อยู่', b2(balance), `ณ งวดที่ ${x.settled} จาก ${x.rows.length}`],
+    ['จ่ายไปแล้ว', b2(paidTotal), `${x.settled} งวด`],
+    ['หายไปกับดอกเบี้ย', b2(paidInterest), 'ส่วนที่ไม่ได้ลดหนี้'],
+    ['กลายเป็นของเราแล้ว', b2(paidPrincipal), 'เงินต้นที่ตัดไปแล้ว'],
     closed !== null
       ? [
           'ปิดสัญญา',
