@@ -73,6 +73,18 @@ export function buildSchedule(
    */
   const lastActualDate = actuals[actuals.length - 1]?.date ?? null
 
+  /**
+   * เส้นแบ่งเดียวกัน แต่นับการโปะด้วย — ใช้ตัดสินว่าแผนโปะยังมีสิทธิ์ลงงวดนั้นไหม
+   *
+   * ⚠️ ต้องนับ partial_prepay ด้วย ต่างจาก lastActualDate ที่นับเฉพาะค่างวด
+   *    คนที่บันทึกเฉพาะก้อนที่โปะ (ไม่ได้บันทึกค่างวดรายเดือน) ก็ถือว่า
+   *    "รู้แล้วว่าเดือนนั้นโปะไปเท่าไหร่" เหมือนกัน
+   */
+  const lastEventDate = events.reduce<ISODate | null>(
+    (latest, e) => (latest === null || e.date > latest ? e.date : latest),
+    null,
+  )
+
   const rows: ScheduleRow[] = []
   let balance = toFixed(terms.principalSatang)
   let accruedCarried = ZERO_FIXED
@@ -174,9 +186,29 @@ export function buildSchedule(
 
     unrounded = add(unrounded, accrueSpan(terms, balance, segFrom, due, step))
 
+    /**
+     * งวดนี้ "รู้แล้ว" ว่าจ่ายอะไรไปบ้างหรือยัง — ความจริงชนะแผนเสมอ
+     *
+     * ⛔ ห้ามเอายอดตามแผนไปบวกทับงวดที่มีรายการจ่ายบันทึกไว้แล้ว
+     *    เคสจริง: วางแผนโปะ ต.ค. ไว้ 225,000 พอถึงเวลาโปะจริงแค่ 150,000
+     *    ตารางเคยแสดงยอดโปะเดือนนั้น 375,000 และตัดหนี้ไป 375,000
+     *    ทั้งที่เงินออกจากบัญชีแค่ 150,000 — ผิดเดือนเดียวแต่ลามทั้งเส้น
+     *    วันปิดหนี้เร็วไป 9 ปี ดอกรวมหาย และสิทธิลดหย่อนทุกปีหลังจากนั้นเพี้ยนตาม (TV-55)
+     *
+     * ⚠️ งวดที่อยู่ก่อนเส้นบันทึกแต่ไม่มีรายการ ก็ถือว่ารู้แล้วว่า "ไม่ได้โปะ"
+     *    กฎเดียวกับที่ใช้กับค่างวด (ดู insideRecorded) แผนต้องตามกฎเดียวกัน
+     *    ไม่งั้นเดือนที่เงินไม่พอจนไม่ได้โปะ จะถูกแผนเติมให้เหมือนโปะไปแล้ว
+     *
+     * prepayThisPeriod ตรงนี้ยังมีแต่ยอดจากรายการจ่ายจริง แผนยังไม่ได้ลง
+     */
+    const periodIsKnown =
+      recorded !== null ||
+      prepayThisPeriod > 0n ||
+      (lastEventDate !== null && due <= lastEventDate)
+
     // ---- ยอดโปะจากแผน (ข้อ 3.4) ตกที่วันตัดยอดเสมอ ----
     // ดอกเบี้ยของงวดคิดเสร็จแล้วจากเงินต้นก่อนโปะ การโปะจึงตัดต้นได้เต็ม
-    if (prepayPlan) {
+    if (prepayPlan && !periodIsKnown) {
       const planned = toFixed(resolvePrepayOn(prepayPlan, due))
       if (planned > 0n) {
         const applied = planned > balance ? balance : planned

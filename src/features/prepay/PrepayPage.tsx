@@ -898,6 +898,8 @@ function CalendarView({
       {values.map((v, i) => {
         const m = i + 1
         const done = doneAt(m)
+        /** ยอดที่ตั้งไว้ในแผนของเดือนนั้น — เดือนที่โปะจริงไปแล้วจะถูกของจริงแทนที่ */
+        const planned = amountAt(draft, year, m)
         const isSelected = done === undefined && selected.includes(m)
         const isAnchor = done === undefined && anchor === m
         // ยอดที่ต้องโอนจริงของเดือนนั้น = ค่างวด + โปะ ตัวเลขที่ผู้ใช้เอาไปเทียบกับเงินในบัญชี
@@ -964,6 +966,14 @@ function CalendarView({
                   bahtNumber(v)
                 )}
               </button>
+            )}
+
+            {/* ⚠️ เดือนที่โปะจริงไปแล้ว เครื่องใช้ของจริงแทนยอดตามแผนเสมอ (TV-55)
+                ถ้าเงียบไว้ ผู้ใช้จะไม่รู้ว่าโปะได้ต่ำกว่าที่ตั้งใจ แล้วนึกว่าแผนเดินตามนั้น */}
+            {done !== undefined && planned > 0 && planned !== done && (
+              <span className="mt-1 block text-right text-micro text-[var(--color-ink-3)]">
+                วางแผนไว้ {bahtNumber(planned)}
+              </span>
             )}
 
             {/* ยอดที่ต้องโอนจริงเดือนนั้น = ค่างวด + โปะ — เลขที่เอาไปเทียบกับเงินในบัญชีได้ตรง ๆ */}
