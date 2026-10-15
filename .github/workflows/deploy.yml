@@ -22,7 +22,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       # engine ที่คำนวณดอกเบี้ยผิดแล้วขึ้น production คือสิ่งที่แอพนี้มีไว้เพื่อป้องกัน
-      # TV-1..TV-33 ต้องผ่านครบ ไม่งั้นไม่ deploy
+      # ทุก TV ต้องผ่านครบ ไม่งั้นไม่ deploy (รายการอยู่ที่ docs/test-vectors.md)
       - run: npm test
       - run: npm run build
 
