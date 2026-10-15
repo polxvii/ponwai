@@ -15,7 +15,8 @@ npm run typecheck
 npm run build        # typecheck + vite build
 ```
 
-push `main` = CI test แล้ว deploy ขึ้น https://ponwai.pages.dev อัตโนมัติ — เช็คด้วย `gh run list`
+push `main` = CI test แล้ว deploy ขึ้น https://ponwai.pages.dev อัตโนมัติ — เช็คสถานะ CI ตามวิธีใน [docs/operations.md](docs/operations.md#ci--deploy)
+(ถ้าเครื่องไม่มี `gh` ใช้ GitHub API สาธารณะผ่าน curl ได้ เพราะ repo เป็น public)
 
 ## กฎที่ห้ามละเมิด
 

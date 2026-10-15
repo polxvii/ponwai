@@ -57,7 +57,13 @@ npm run dev
    - `wrangler pages project create ponwai` (continue-on-error — มีแล้วก็ข้าม)
    - `node scripts/pages-assets.mjs` → `wrangler pages deploy dist --project-name=ponwai --branch=main`
 
-ดูสถานะ: `gh run list --limit 5` · ดู log ที่พัง: `gh run view <id> --log-failed`
+ดูสถานะ — เลือกทางที่มีในเครื่อง:
+- เว็บ: https://github.com/polxvii/ponwai/actions
+- `gh run list --limit 5` · log ที่พัง `gh run view <id> --log-failed` (ถ้าติดตั้ง GitHub CLI ไว้)
+- ไม่มี `gh` (เครื่องทำงานหลักตอนนี้ไม่มี) — repo เป็น public จึงอ่าน API ได้โดยไม่ต้อง login:
+  ```bash
+  curl -s "https://api.github.com/repos/polxvii/ponwai/actions/runs?per_page=3" | grep -E '"(head_sha|status|conclusion)"'
+  ```
 
 ## Supabase keep-alive
 
@@ -78,7 +84,7 @@ Free tier pause project หลังไม่มี request 7 วัน (แล�
 | อาการ | สาเหตุ | แก้ |
 |---|---|---|
 | CI deploy แดง ทั้งที่ build ผ่าน | `_redirects` หลุดเข้า `dist/` ก่อน `wrangler deploy` | ให้อยู่ใน `deploy/pages/` เท่านั้น |
-| เว็บไม่อัปเดตหลัง push | CI แดง หรือ `CLOUDFLARE_ENABLED` ไม่ได้ตั้ง หรือ SW ถือ cache เก่า | `gh run list` / ปิดเปิดแท็บ / ขึ้น `VERSION` ใน `sw.js` |
+| เว็บไม่อัปเดตหลัง push | CI แดง หรือ `CLOUDFLARE_ENABLED` ไม่ได้ตั้ง หรือ SW ถือ cache เก่า | ดูสถานะ CI (ข้างบน) / ปิดเปิดแท็บ / ขึ้น `VERSION` ใน `sw.js` |
 | "permission denied for table" | grant ของ schema `ponwai` หาย | รัน grant ใน init migration ซ้ำ |
 | query ไม่เจออะไรเลย ไม่มี error ชัด | ไม่ได้ expose schema `ponwai` หรือ client ไม่ได้ตั้ง `db.schema` | Settings → API |
 | สร้างสัญญาไม่ได้ error FK | ไม่ได้รัน `seed.sql` (ไม่มีแถวธนาคาร) | รัน seed |
