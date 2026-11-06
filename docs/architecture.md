@@ -39,7 +39,7 @@
 | `supabase.ts` | client ตั้ง `db.schema = 'ponwai'` + storage แบบ "จำฉันไว้" (local/session) |
 | `db.ts` | **ทางเดียวที่คุยกับ Supabase** แปลงแถว DB ↔ type ของ engine (`toLoanTerms`, `toPaymentEvents`) |
 | `auth.tsx` | `AuthProvider` / `useAuth` |
-| `progress.ts` | `settledPeriods`, `balanceOn`, `interestUpTo`, **`prepayOfRow`** (สูตรเดียวของคอลัมน์โปะ) |
+| `progress.ts` | `settledPeriods`, `balanceOn`, `interestUpTo`, `remainingToPay` (ต้น + ดอกที่ยังต้องจ่าย), **`prepayOfRow`** (สูตรเดียวของคอลัมน์โปะ) |
 | `closing.ts` | `rowsUntilClose`, `validateClose`, ป้ายเหตุผลการปิด |
 | `format.ts` | เงิน (`baht`, `bahtFixed`, `bahtNumber` — มีสตางค์เสมอ), วันที่ พ.ศ., ช่วงคิดดอก |
 | `report.ts` | รายงาน HTML ไฟล์เดียว เปิดออฟไลน์ได้ พิมพ์เป็น PDF ได้ |

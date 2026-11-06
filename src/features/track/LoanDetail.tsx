@@ -34,7 +34,7 @@ import {
 import type { PrepayPlan } from '@engine/prepay.js'
 import { isoDate } from '@engine/date.js'
 import { todayISO } from './model'
-import { balanceOn, prepayOfRow, settledPeriods } from '@/lib/progress'
+import { balanceOn, prepayOfRow, remainingToPay, settledPeriods } from '@/lib/progress'
 import { BankMark } from '@/components/BankMark'
 
 const FIXED = 1_000_000_000_000n
@@ -188,6 +188,10 @@ export function LoanDetail({
     .reduce((a, r) => (a + r.interestPaidFixed) as Fixed, 0n as Fixed)
   const principalPaid = ((item.disbursedSatang * FIXED) - balanceNow) as Fixed
   const payoff = rows[rows.length - 1]
+  /** ยังต้องจ่ายอีกเท่าไหร่จนปิดหนี้ (ต้น + ดอก) — null = ตารางไม่มีวันปิดหนี้ (TV-57) */
+  const remaining = isClosed ? null : remainingToPay(rows, actual.paidOff, paidPeriods, balanceNow)
+  /** งวดที่เหลือมียอดโปะตามแผนไหม — ถ้ามี ต้องบอกว่าตัวเลขข้างบนคิดตามแผน ไม่ใช่ค่างวดเปล่า ๆ */
+  const planAhead = rows.some((r) => r.index > paidPeriods && r.prepayFixed > 0n)
   const savedPeriods = plan.rows.length - rows.length
   // แถวปีที่ครบอายุสัญญาของตารางตามสัญญา — มีก็ต่อเมื่อตารางนั้นยังไม่จบ
   const contractAtTerm = plan.paidOff
@@ -276,6 +280,31 @@ export function LoanDetail({
             ? `ตัดเงินต้นไปได้เอง ${bahtFixed(principalPaid)} · ปิดยอดที่เหลือ ${bahtFixed(balanceNow)}`
             : `เป็นของเราแล้ว ${bahtFixed(principalPaid)} · ยังเป็นหนี้ ${bahtFixed(balanceNow)}`}
         </p>
+
+        {/* ⚠️ ยอดคงเหลือข้างบนเป็นเงินต้นอย่างเดียว คนวางแผนเงินต้องรู้ภาระทั้งหมดรวมดอกด้วย
+            ห้ามคิดเป็น เงินต้น × อัตรา × ปี — ต้องรวมยอดชำระของงวดที่เหลือจากตารางเดียวกับข้างล่าง (TV-57) */}
+        {!isClosed && (
+          <div className="mt-5 border-t border-[var(--color-panel-ink-3)]/30 pt-4">
+            <p className="text-meta text-[var(--color-panel-ink-2)]">
+              ยังต้องจ่ายอีกทั้งหมดจนปิดหนี้ (เงินต้น + ดอกเบี้ย)
+            </p>
+            {remaining ? (
+              <>
+                <p className="mt-1 num text-figure">{bahtFixed(remaining.totalFixed)}</p>
+                <p className="mt-1 text-micro text-[var(--color-panel-ink-3)]">
+                  เงินต้น {bahtFixed(balanceNow)} + ดอกเบี้ยอีก {bahtFixed(remaining.interestFixed)}
+                  {payoff &&
+                    ` · อีก ${remaining.periods} งวด ถึง ${formatThaiDate(payoff.date, 'monthYear')}`}
+                  {planAhead && ' · คิดตามแผนโปะที่บันทึกไว้'}
+                </p>
+              </>
+            ) : (
+              <p className="mt-1 text-meta text-[var(--color-panel-ink-2)]">
+                คิดไม่ได้ — จ่ายตามค่างวดนี้หนี้ไม่มีวันหมด ดูคำเตือนด้านบน
+              </p>
+            )}
+          </div>
+        )}
 
         <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-1 text-meta sm:grid-cols-3">
           <PanelRow k="ผ่อนมาแล้ว" v={`${paidPeriods} งวด`} />

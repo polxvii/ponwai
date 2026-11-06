@@ -73,6 +73,45 @@ export function interestUpTo(rows: readonly ScheduleRow[], n: number): Fixed {
     .reduce((a, r) => (a + r.interestFixed) as Fixed, 0n as Fixed)
 }
 
+export type RemainingToPay = {
+  /** เงินที่ยังต้องจ่ายทั้งหมดจนปิดหนี้ = เงินต้นคงเหลือ + ดอกเบี้ยที่ยังไม่ได้จ่าย */
+  totalFixed: Fixed
+  /** ดอกเบี้ยที่ยังต้องจ่ายต่อจากนี้ */
+  interestFixed: Fixed
+  /** จำนวนงวดที่ยังเหลือ */
+  periods: number
+}
+
+/**
+ * ยังต้องจ่ายอีกเท่าไหร่จนปิดหนี้ (ต้น + ดอก) — ตอบคำถาม "ยังเหลือภาระเท่าไหร่" ไว้วางแผนเงิน
+ *
+ * = ผลรวมยอดชำระของทุกงวดที่ยังไม่จบ (เลขงวด > settled) ตามตารางที่ส่งเข้ามา
+ *   ตารางที่ใส่แผนโปะไว้ ตัวเลขนี้ก็คิดตามแผนนั้น — ผู้เรียกต้องบอกผู้ใช้ด้วย
+ *
+ * ⚠️ ดอกเบี้ย = ยอดรวม − เงินต้นคงเหลือ ไม่ใช่ผลรวม interestFixed ของงวดที่เหลือ
+ *    งวดที่ยกดอกค้างมาหรือทบต้น ดอกที่เกิดในงวดไม่เท่ากับดอกที่จ่ายในงวด
+ *    แต่ยอดชำระ = ดอก + ต้น เสมอ (TV-28) ลบกันแล้วได้ดอกที่จะจ่ายจริงตรงสตางค์
+ * ⛔ ตารางที่ไม่ปิดหนี้ (ค่างวดไม่พอ วิ่งชนเพดานจำนวนงวด) คืน null
+ *    ผลรวมแบบนั้นคือค่าของเพดาน ไม่ใช่ภาระจริง — ห้ามเอาไปโชว์เป็นตัวเลข
+ */
+export function remainingToPay(
+  rows: readonly ScheduleRow[],
+  paidOff: boolean,
+  settled: number,
+  balanceNow: Fixed,
+): RemainingToPay | null {
+  if (!paidOff) return null
+  // ⛔ เทียบด้วยเลขงวด ไม่ใช่ตำแหน่งในอาร์เรย์ — เหตุผลเดียวกับ balanceOn
+  const future = rows.filter((r) => r.index > settled)
+  const totalFixed = future.reduce((a, r) => (a + r.paymentFixed) as Fixed, 0n as Fixed)
+  const interest = totalFixed - balanceNow
+  return {
+    totalFixed,
+    interestFixed: (interest > 0n ? interest : 0n) as Fixed,
+    periods: future.length,
+  }
+}
+
 /**
  * ส่วนที่เป็น "เงินโปะ" ของงวดนั้น
  *

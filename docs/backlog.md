@@ -20,7 +20,7 @@
 - **npm audit เจอช่องโหว่ใน dev tooling** (ตรวจ 15 ต.ค. 2569) — ไม่กระทบ bundle ที่ส่งให้ผู้ใช้
   - `undici`, `@fastify/busboy`, `sharp`, `esbuild`, `miniflare` มาจาก wrangler 3 → ต้องอัปเกรด **wrangler 4** (major)
     แล้วดู CI ว่า `wrangler deploy` กับ `wrangler pages deploy` ยังผ่าน — ทำเป็น commit แยก revert ง่าย
-  - `source-map-js` แก้ได้ด้วย `npm audit fix` ไม่ต้อง bump major
+  - `source-map-js` และ `@vitest/mocker` (เจอเพิ่ม 6 พ.ย. 2569) แก้ได้ด้วย `npm audit fix` ไม่ต้อง bump major
 
 ## ตัวเลือกในอนาคต (spec ข้อ 12)
 
